@@ -223,6 +223,11 @@ void AP_Periph_FW::handle_get_node_info(CanardInstance* canard_instance,
                    total_size);
 }
 
+// compatability code added Mar 2024 for 4.6:
+#ifndef AP_PERIPH_GPS_TYPE_COMPATABILITY_ENABLED
+#define AP_PERIPH_GPS_TYPE_COMPATABILITY_ENABLED 1
+#endif
+
 /*
   handle parameter GetSet request
  */
@@ -245,7 +250,18 @@ void AP_Periph_FW::handle_param_getset(CanardInstance* canard_instance, CanardRx
         vp = nullptr;
     } else if (req.name.len != 0 && req.name.len <= AP_MAX_NAME_SIZE) {
         memcpy((char *)pkt.name.data, (char *)req.name.data, req.name.len);
+#if AP_PERIPH_GPS_TYPE_COMPATABILITY_ENABLED
+        // cope with older versions of ArduPilot attempting to
+        // auto-configure AP_Periph using "GPS_TYPE" by
+        // auto-converting to "GPS1_TYPE":
+        if (strncmp((char*)req.name.data, "GPS_TYPE", req.name.len) == 0) {
+            vp = AP_Param::find("GPS1_TYPE", &ptype);
+        } else {
+            vp = AP_Param::find((char *)pkt.name.data, &ptype);
+        }
+#else
         vp = AP_Param::find((char *)pkt.name.data, &ptype);
+#endif
     } else {
         AP_Param::ParamToken token {};
         vp = AP_Param::find_by_index(req.index, &ptype, &token);
@@ -1276,7 +1292,7 @@ void AP_Periph_FW::processRx(void)
                 if (other_instance.mirror_queue == nullptr) { // we aren't mirroring here, or failed on memory
                     continue;
                 }
-                if (other_instance.index == ins.index) { // don't self add
+                if (other_instance.index == instance.index) { // don't self add
                     continue;
                 }
                 other_instance.mirror_queue->push(rxmsg);
@@ -1606,15 +1622,15 @@ void AP_Periph_FW::can_start()
 
     for (uint8_t i=0; i<HAL_NUM_CAN_IFACES; i++) {
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
-        can_iface_periph[i] = new ChibiOS::CANIface();
+        can_iface_periph[i] = NEW_NOTHROW ChibiOS::CANIface();
 #elif CONFIG_HAL_BOARD == HAL_BOARD_SITL
-        can_iface_periph[i] = new HALSITL::CANIface();
+        can_iface_periph[i] = NEW_NOTHROW HALSITL::CANIface();
 #endif
         instances[i].iface = can_iface_periph[i];
         instances[i].index = i;
 #if HAL_PERIPH_CAN_MIRROR
         if ((g.can_mirror_ports & (1U << i)) != 0) {
-            instances[i].mirror_queue = new ObjectBuffer<AP_HAL::CANFrame> (HAL_PERIPH_CAN_MIRROR_QUEUE_SIZE);
+            instances[i].mirror_queue = NEW_NOTHROW ObjectBuffer<AP_HAL::CANFrame> (HAL_PERIPH_CAN_MIRROR_QUEUE_SIZE);
         }
 #endif //HAL_PERIPH_CAN_MIRROR
 #if HAL_NUM_CAN_IFACES >= 2
@@ -1832,6 +1848,9 @@ void AP_Periph_FW::can_update()
     #endif
 #ifdef HAL_PERIPH_ENABLE_DEVICE_TEMPERATURE
         temperature_sensor_update();
+#endif
+#ifdef HAL_PERIPH_ENABLE_RPM_STREAM
+        rpm_sensor_send();
 #endif
     }
     const uint32_t now_us = AP_HAL::micros();

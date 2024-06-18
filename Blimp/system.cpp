@@ -33,7 +33,7 @@ void Blimp::init_ardupilot()
 
     // allocate the motors class
     allocate_motors();
-    loiter = new Loiter(blimp.scheduler.get_loop_rate_hz());
+    loiter = NEW_NOTHROW Loiter(blimp.scheduler.get_loop_rate_hz());
 
     // initialise rc channels including setting mode
     rc().convert_options(RC_Channel::AUX_FUNC::ARMDISARM_UNUSED, RC_Channel::AUX_FUNC::ARMDISARM);
@@ -58,7 +58,7 @@ void Blimp::init_ardupilot()
 
     // Do GPS init
     gps.set_log_gps_bit(MASK_LOG_GPS);
-    gps.init(serial_manager);
+    gps.init();
 
     AP::compass().set_log_bit(MASK_LOG_COMPASS);
     AP::compass().init();
@@ -240,7 +240,7 @@ void Blimp::allocate_motors(void)
     switch ((Fins::motor_frame_class)g2.frame_class.get()) {
     case Fins::MOTOR_FRAME_AIRFISH:
     default:
-        motors = new Fins(blimp.scheduler.get_loop_rate_hz());
+        motors = NEW_NOTHROW Fins(blimp.scheduler.get_loop_rate_hz());
         break;
     }
     if (motors == nullptr) {
