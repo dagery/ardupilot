@@ -3,12 +3,68 @@
 #include "Copter.h"
 #include <AP_Math/chirp.h>
 #include <AP_ExternalControl/AP_ExternalControl_config.h> // TODO why is this needed if Copter.h includes this
+
 class Parameters;
 class ParametersG2;
 
 class GCS_Copter;
 
+// object shared by both Guided and Auto for takeoff.
+// position controller controls vehicle but the user can control the yaw.
+class _AutoTakeoff {
+public:
+    void run();
+    void start(float complete_alt_cm, bool terrain_alt);
+    bool get_position(Vector3p& completion_pos);
+
+    bool complete;          // true when takeoff is complete
+
+private:
+    // altitude above-ekf-origin below which auto takeoff does not control horizontal position
+    bool no_nav_active;
+    float no_nav_alt_cm;
+
+    // auto takeoff variables
+    float complete_alt_cm;  // completion altitude expressed in cm above ekf origin or above terrain (depending upon auto_takeoff_terrain_alt)
+    bool terrain_alt;       // true if altitudes are above terrain
+    Vector3p complete_pos;  // target takeoff position as offset from ekf origin in cm
+};
+
+#if AC_PAYLOAD_PLACE_ENABLED
+class PayloadPlace {
+public:
+    void run();
+    void start_descent();
+    bool verify();
+
+    enum class State : uint8_t {
+        FlyToLocation,
+        Descent_Start,
+        Descent,
+        Release,
+        Releasing,
+        Delay,
+        Ascent_Start,
+        Ascent,
+        Done,
+    };
+
+    // these are set by the Mission code:
+    State state = State::Descent_Start; // records state of payload place
+    float descent_max_cm;
+
+private:
+
+    uint32_t descent_established_time_ms; // milliseconds
+    uint32_t place_start_time_ms; // milliseconds
+    float descent_thrust_level;
+    float descent_start_altitude_cm;
+    float descent_speed_cms;
+};
+#endif
+
 class Mode {
+    friend class PayloadPlace;
 
 public:
 
@@ -51,6 +107,8 @@ public:
     // do not allow copying
     CLASS_NO_COPY(Mode);
 
+    friend class _AutoTakeoff;
+
     // returns a unique number specific to this mode
     virtual Number mode_number() const = 0;
 
@@ -70,6 +128,10 @@ public:
     virtual bool allows_save_trim() const { return false; }
     virtual bool allows_autotune() const { return false; }
     virtual bool allows_flip() const { return false; }
+
+#if FRAME_CONFIG == HELI_FRAME
+    virtual bool allows_inverted() const { return false; };
+#endif
 
     // return a string for this flightmode
     virtual const char *name() const = 0;
@@ -136,6 +198,9 @@ protected:
     void zero_throttle_and_hold_attitude();
     void make_safe_ground_handling(bool force_throttle_unlimited = false);
 
+    // Return stopping point as a location with above origin alt frame
+    Location get_stopping_point() const;
+
     // functions to control normal landing.  pause_descent is true if vehicle should not descend
     void land_run_horizontal_control();
     void land_run_vertical_control(bool pause_descent = false);
@@ -143,6 +208,11 @@ protected:
         land_run_horizontal_control();
         land_run_vertical_control(pause_descent);
     }
+
+#if AC_PAYLOAD_PLACE_ENABLED
+    // payload place flight behaviour:
+    static PayloadPlace payload_place;
+#endif
 
     // run normal or precision landing (if enabled)
     // pause_descent is true if vehicle should not descend
@@ -162,12 +232,12 @@ protected:
     virtual float throttle_hover() const;
 
     // Alt_Hold based flight mode states used in Alt_Hold, Loiter, and Sport
-    enum AltHoldModeState {
-        AltHold_MotorStopped,
-        AltHold_Takeoff,
-        AltHold_Landed_Ground_Idle,
-        AltHold_Landed_Pre_Takeoff,
-        AltHold_Flying
+    enum class AltHoldModeState {
+        MotorStopped,
+        Takeoff,
+        Landed_Ground_Idle,
+        Landed_Pre_Takeoff,
+        Flying
     };
     AltHoldModeState get_alt_hold_state(float target_climb_rate_cms);
 
@@ -179,7 +249,7 @@ protected:
     AC_PosControl *&pos_control;
     AP_InertialNav &inertial_nav;
     AP_AHRS &ahrs;
-    AC_AttitudeControl_t *&attitude_control;
+    AC_AttitudeControl *&attitude_control;
     MOTOR_CLASS *&motors;
     RC_Channel *&channel_roll;
     RC_Channel *&channel_pitch;
@@ -215,21 +285,7 @@ protected:
 
     virtual bool do_user_takeoff_start(float takeoff_alt_cm);
 
-    // method shared by both Guided and Auto for takeoff.
-    // position controller controls vehicle but the user can control the yaw.
-    void auto_takeoff_run();
-    void auto_takeoff_start(float complete_alt_cm, bool terrain_alt);
-    bool auto_takeoff_get_position(Vector3p& completion_pos);
-
-    // altitude above-ekf-origin below which auto takeoff does not control horizontal position
-    static bool auto_takeoff_no_nav_active;
-    static float auto_takeoff_no_nav_alt_cm;
-
-    // auto takeoff variables
-    static float auto_takeoff_complete_alt_cm;  // completion altitude expressed in cm above ekf origin or above terrain (depending upon auto_takeoff_terrain_alt)
-    static bool auto_takeoff_terrain_alt;       // true if altitudes are above terrain
-    static bool auto_takeoff_complete;          // true when takeoff is complete
-    static Vector3p auto_takeoff_complete_pos;  // target takeoff position as offset from ekf origin in cm
+    static _AutoTakeoff auto_takeoff;
 
 public:
     // Navigation Yaw control
@@ -286,7 +342,9 @@ public:
         // rate_cds(): desired yaw rate in centidegrees/second:
         float rate_cds();
 
+        // returns a yaw in degrees, direction of vehicle travel:
         float look_ahead_yaw();
+
         float roi_yaw() const;
 
         // auto flight mode's yaw mode
@@ -423,10 +481,11 @@ private:
 
 };
 
-
 class ModeAuto : public Mode {
 
 public:
+    friend class PayloadPlace;  // in case wp_run is accidentally required
+
     // inherit constructor
     using Mode::Mode;
     Number mode_number() const override { return auto_RTL? Number::AUTO_RTL : Number::AUTO; }
@@ -452,7 +511,9 @@ public:
         NAVGUIDED,
         LOITER,
         LOITER_TO_ALT,
+#if AP_MISSION_NAV_PAYLOAD_PLACE_ENABLED && AC_PAYLOAD_PLACE_ENABLED
         NAV_PAYLOAD_PLACE,
+#endif
         NAV_SCRIPT_TIME,
         NAV_ATTITUDE_TIME,
     };
@@ -493,6 +554,12 @@ public:
     // Go straight to landing sequence via DO_LAND_START, if succeeds pretend to be Auto RTL mode
     bool jump_to_landing_sequence_auto_RTL(ModeReason reason);
 
+    // Join mission after DO_RETURN_PATH_START waypoint, if succeeds pretend to be Auto RTL mode
+    bool return_path_start_auto_RTL(ModeReason reason);
+
+    // Try join return path else do land start
+    bool return_path_or_jump_to_landing_sequence_auto_RTL(ModeReason reason);
+
     // lua accessors for nav script time support
     bool nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2, int16_t &arg3, int16_t &arg4);
     void nav_script_time_done(uint16_t id);
@@ -529,6 +596,9 @@ private:
         AllowWeatherVaning                 = (1 << 7U),
     };
 
+    // Enter auto rtl pseudo mode
+    bool enter_auto_rtl(ModeReason reason);
+
     bool start_command(const AP_Mission::Mission_Command& cmd);
     bool verify_command(const AP_Mission::Mission_Command& cmd);
     void exit_mission();
@@ -546,12 +616,6 @@ private:
     void nav_attitude_time_run();
 
     Location loc_from_cmd(const AP_Mission::Mission_Command& cmd, const Location& default_loc) const;
-
-    void payload_place_run();
-    bool payload_place_run_should_run();
-    void payload_place_run_hover();
-    void payload_place_run_descent();
-    void payload_place_run_release();
 
     SubMode _mode = SubMode::TAKEOFF;   // controls which auto controller is run
 
@@ -634,21 +698,12 @@ private:
     int32_t condition_value;  // used in condition commands (eg delay, change alt, etc.)
     uint32_t condition_start;
 
+    // Land within Auto state
     enum class State {
         FlyToLocation = 0,
         Descending = 1
     };
     State state = State::FlyToLocation;
-
-    struct {
-        PayloadPlaceStateType state = PayloadPlaceStateType_Descent_Start; // records state of payload place
-        uint32_t descent_established_time_ms; // milliseconds
-        uint32_t place_start_time_ms; // milliseconds
-        float descent_thrust_level;
-        float descent_start_altitude_cm;
-        float descent_speed_cms;
-        float descent_max_cm;
-    } nav_payload_place;
 
     bool waiting_to_start;  // true if waiting for vehicle to be armed or EKF origin before starting mission
 
@@ -678,6 +733,13 @@ private:
         float climb_rate;   // climb rate in m/s. provided by mission command
         uint32_t start_ms;  // system time that nav attitude time command was received (used for timeout)
     } nav_attitude_time;
+
+    // desired speeds
+    struct {
+        float xy;     // desired speed horizontally in m/s. 0 if unset
+        float up;     // desired speed upwards in m/s. 0 if unset
+        float down;   // desired speed downwards in m/s. 0 if unset
+    } desired_speed_override;
 };
 
 #if AUTOTUNE_ENABLED == ENABLED
@@ -700,7 +762,9 @@ protected:
     float get_pilot_desired_climb_rate_cms(void) const override;
     void get_pilot_desired_rp_yrate_cd(float &roll_cd, float &pitch_cd, float &yaw_rate_cds) override;
     void init_z_limits() override;
+#if HAL_LOGGING_ENABLED
     void log_pids() override;
+#endif
 };
 
 class ModeAutoTune : public Mode {
@@ -1063,7 +1127,7 @@ protected:
 private:
 
     // enum for GUID_OPTIONS parameter
-    enum class Options : int32_t {
+    enum class Option : uint32_t {
         AllowArmingFromTX   = (1U << 0),
         // this bit is still available, pilot yaw was mapped to bit 2 for symmetry with auto
         IgnorePilotYaw      = (1U << 2),
@@ -1073,6 +1137,9 @@ private:
         WPNavUsedForPosControl = (1U << 6),
         AllowWeatherVaning = (1U << 7)
     };
+
+    // returns true if the Guided-mode-option is set (see GUID_OPTIONS)
+    bool option_is_enabled(Option option) const;
 
     // wp controller
     void wp_control_start();
@@ -1529,6 +1596,8 @@ public:
     bool init(bool ignore_checks) override;
     void run() override;
 
+    bool allows_inverted() const override { return true; };
+
 protected:
 
 private:
@@ -1566,22 +1635,29 @@ protected:
 private:
 
     void log_data() const;
+    bool is_poscontrol_axis_type() const;
 
     enum class AxisType {
-        NONE = 0,           // none
-        INPUT_ROLL = 1,     // angle input roll axis is being excited
-        INPUT_PITCH = 2,    // angle pitch axis is being excited
-        INPUT_YAW = 3,      // angle yaw axis is being excited
-        RECOVER_ROLL = 4,   // angle roll axis is being excited
-        RECOVER_PITCH = 5,  // angle pitch axis is being excited
-        RECOVER_YAW = 6,    // angle yaw axis is being excited
-        RATE_ROLL = 7,      // rate roll axis is being excited
-        RATE_PITCH = 8,     // rate pitch axis is being excited
-        RATE_YAW = 9,       // rate yaw axis is being excited
-        MIX_ROLL = 10,      // mixer roll axis is being excited
-        MIX_PITCH = 11,     // mixer pitch axis is being excited
-        MIX_YAW = 12,       // mixer pitch axis is being excited
-        MIX_THROTTLE = 13,  // mixer throttle axis is being excited
+        NONE = 0,               // none
+        INPUT_ROLL = 1,         // angle input roll axis is being excited
+        INPUT_PITCH = 2,        // angle pitch axis is being excited
+        INPUT_YAW = 3,          // angle yaw axis is being excited
+        RECOVER_ROLL = 4,       // angle roll axis is being excited
+        RECOVER_PITCH = 5,      // angle pitch axis is being excited
+        RECOVER_YAW = 6,        // angle yaw axis is being excited
+        RATE_ROLL = 7,          // rate roll axis is being excited
+        RATE_PITCH = 8,         // rate pitch axis is being excited
+        RATE_YAW = 9,           // rate yaw axis is being excited
+        MIX_ROLL = 10,          // mixer roll axis is being excited
+        MIX_PITCH = 11,         // mixer pitch axis is being excited
+        MIX_YAW = 12,           // mixer pitch axis is being excited
+        MIX_THROTTLE = 13,      // mixer throttle axis is being excited
+        DISTURB_POS_LAT = 14,   // lateral body axis measured position is being excited
+        DISTURB_POS_LONG = 15,  // longitudinal body axis measured position is being excited
+        DISTURB_VEL_LAT = 16,   // lateral body axis measured velocity is being excited
+        DISTURB_VEL_LONG = 17,  // longitudinal body axis measured velocity is being excited
+        INPUT_VEL_LAT = 18,     // lateral body axis commanded velocity is being excited
+        INPUT_VEL_LONG = 19,    // longitudinal body axis commanded velocity is being excited
     };
 
     AP_Int8 axis;               // Controls which axis are being excited. Set to non-zero to display other parameters
@@ -1598,7 +1674,9 @@ private:
     float waveform_freq_rads;   // Instantaneous waveform frequency
     float time_const_freq;      // Time at constant frequency before chirp starts
     int8_t log_subsample;       // Subsample multiple for logging.
-
+    Vector2f target_vel;        // target velocity for position controller modes
+    Vector2f target_pos;       // target positon
+    Vector2f input_vel_last;    // last cycle input velocity
     // System ID states
     enum class SystemIDModeState {
         SYSTEMID_STATE_STOPPED,
@@ -1723,7 +1801,7 @@ private:
 
 };
 
-#if AP_FOLLOW_ENABLED
+#if MODE_FOLLOW_ENABLED == ENABLED
 class ModeFollow : public ModeGuided {
 
 public:

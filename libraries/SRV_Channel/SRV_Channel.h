@@ -280,6 +280,9 @@ public:
         return function.configured();
     }
 
+    // convert a scaled value (either range or angle depending on setup) to a pwm
+    uint16_t pwm_from_scaled_value(float scaled_value) const;
+
     // specify that small rc input changes should be ignored during passthrough
     // used by DO_SET_SERVO commands
     void ignore_small_rcin_changes() { ign_small_rcin_changes = true; }
@@ -373,7 +376,7 @@ public:
     static void set_output_pwm_chan_timeout(uint8_t chan, uint16_t value, uint16_t timeout_ms);
 
     // set output value for a function channel as a scaled value. This
-    // calls calc_pwm() to also set the pwm value
+    // this should be followed by a call to calc_pwm() to output the pwm values
     static void set_output_scaled(SRV_Channel::Aux_servo_function_t function, float value);
 
     // get scaled output for the given function type.

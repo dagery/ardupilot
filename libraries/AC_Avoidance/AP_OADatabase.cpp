@@ -11,6 +11,10 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "AC_Avoidance_config.h"
+
+#if AP_OADATABASE_ENABLED
+
 #include "AP_OADatabase.h"
 
 #include <AP_AHRS/AP_AHRS.h>
@@ -186,7 +190,7 @@ void AP_OADatabase::init_queue()
         return;
     }
 
-    _queue.items = new ObjectBuffer<OA_DbItem>(_queue.size);
+    _queue.items = NEW_NOTHROW ObjectBuffer<OA_DbItem>(_queue.size);
     if (_queue.items != nullptr && _queue.items->get_size() == 0) {
         // allocation failed
         delete _queue.items;
@@ -201,7 +205,7 @@ void AP_OADatabase::init_database()
         return;
     }
 
-    _database.items = new OA_DbItem[_database.size];
+    _database.items = NEW_NOTHROW OA_DbItem[_database.size];
 }
 
 // get bitmask of gcs channels item should be sent to based on its importance
@@ -230,7 +234,7 @@ uint8_t AP_OADatabase::get_send_to_gcs_flags(const OA_DbItemImportance importanc
     return 0x0;
 }
 
-// returns true when there's more work inthe queue to do
+// returns true when there's more work in the queue to do
 bool AP_OADatabase::process_queue()
 {
     if (!healthy()) {
@@ -482,3 +486,5 @@ AP_OADatabase *oadatabase()
 }
 
 }
+
+#endif  // AP_OADATABASE_ENABLED

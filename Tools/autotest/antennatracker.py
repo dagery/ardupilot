@@ -14,15 +14,15 @@ import os
 from pymavlink import mavextra
 from pymavlink import mavutil
 
-from common import AutoTest
-from common import NotAchievedException
+import vehicle_test_suite
+from vehicle_test_suite import NotAchievedException
 
 # get location of scripts
 testdir = os.path.dirname(os.path.realpath(__file__))
 SITL_START_LOCATION = mavutil.location(-27.274439, 151.290064, 343, 8.7)
 
 
-class AutoTestTracker(AutoTest):
+class AutoTestTracker(vehicle_test_suite.TestSuite):
 
     def log_name(self):
         return "AntennaTracker"
@@ -162,11 +162,42 @@ class AutoTestTracker(AutoTest):
                                           timeout=90,
                                           comparator=operator.le)
 
+    def BaseMessageSet(self):
+        '''ensure we're getting messages we expect'''
+        self.set_parameter('BATT_MONITOR', 4)
+        self.reboot_sitl()
+        for msg in 'BATTERY_STATUS', :
+            self.assert_receive_message(msg)
+
     def disabled_tests(self):
         return {
             "ArmFeatures": "See https://github.com/ArduPilot/ardupilot/issues/10652",
             "CPUFailsafe": " tracker doesn't have a CPU failsafe",
         }
+
+    def GPSForYaw(self):
+        '''Moving baseline GPS yaw'''
+        self.context_push()
+
+        self.load_default_params_file("tracker-gps-for-yaw.parm")
+        self.reboot_sitl()
+
+        self.wait_gps_fix_type_gte(6, message_type="GPS2_RAW", verbose=True)
+        tstart = self.get_sim_time()
+        while True:
+            if self.get_sim_time_cached() - tstart > 20:
+                break
+            m_gps_raw = self.assert_receive_message("GPS2_RAW", verbose=True)
+            m_sim = self.assert_receive_message("SIMSTATE", verbose=True)
+            gps_raw_hdg = m_gps_raw.yaw * 0.01
+            sim_hdg = mavextra.wrap_360(math.degrees(m_sim.yaw))
+            if abs(gps_raw_hdg - sim_hdg) > 5:
+                raise NotAchievedException("GPS_RAW not tracking simstate yaw")
+            self.progress(f"yaw match ({gps_raw_hdg} vs {sim_hdg}")
+
+        self.context_pop()
+
+        self.reboot_sitl()
 
     def tests(self):
         '''return list of all tests'''
@@ -178,5 +209,7 @@ class AutoTestTracker(AutoTest):
             self.MAV_CMD_MISSION_START,
             self.NMEAOutput,
             self.SCAN,
+            self.BaseMessageSet,
+            self.GPSForYaw,
         ])
         return ret

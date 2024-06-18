@@ -94,7 +94,7 @@ AP_InertialSensor_Backend *AP_InertialSensor_Invensensev2::probe(AP_InertialSens
         return nullptr;
     }
     AP_InertialSensor_Invensensev2 *sensor =
-        new AP_InertialSensor_Invensensev2(imu, std::move(dev), rotation);
+        NEW_NOTHROW AP_InertialSensor_Invensensev2(imu, std::move(dev), rotation);
     if (!sensor || !sensor->_init()) {
         delete sensor;
         return nullptr;
@@ -116,7 +116,7 @@ AP_InertialSensor_Backend *AP_InertialSensor_Invensensev2::probe(AP_InertialSens
 
     dev->set_read_flag(0x80);
 
-    sensor = new AP_InertialSensor_Invensensev2(imu, std::move(dev), rotation);
+    sensor = NEW_NOTHROW AP_InertialSensor_Invensensev2(imu, std::move(dev), rotation);
     if (!sensor || !sensor->_init()) {
         delete sensor;
         return nullptr;
@@ -166,6 +166,11 @@ bool AP_InertialSensor_Invensensev2::_has_auxiliary_bus()
 
 void AP_InertialSensor_Invensensev2::start()
 {
+    // pre-fetch instance numbers for checking fast sampling settings
+    if (!_imu.get_gyro_instance(_gyro_instance) || !_imu.get_accel_instance(_accel_instance)) {
+        return;
+    }
+
     WITH_SEMAPHORE(_dev->get_semaphore());
 
     // initially run the bus at low speed
@@ -288,7 +293,7 @@ AuxiliaryBus *AP_InertialSensor_Invensensev2::get_auxiliary_bus()
     }
 
     if (_has_auxiliary_bus()) {
-        _auxiliary_bus = new AP_Invensensev2_AuxiliaryBus(*this, _dev->get_bus_id());
+        _auxiliary_bus = NEW_NOTHROW AP_Invensensev2_AuxiliaryBus(*this, _dev->get_bus_id());
     }
 
     return _auxiliary_bus;
@@ -863,7 +868,7 @@ AuxiliaryBusSlave *AP_Invensensev2_AuxiliaryBus::_instantiate_slave(uint8_t addr
         _configure_slaves();
     }
 
-    return new AP_Invensensev2_AuxiliaryBusSlave(*this, addr, instance);
+    return NEW_NOTHROW AP_Invensensev2_AuxiliaryBusSlave(*this, addr, instance);
 }
 
 void AP_Invensensev2_AuxiliaryBus::_configure_slaves()

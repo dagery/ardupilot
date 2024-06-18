@@ -6,7 +6,7 @@
 // CIRCLE_INCLUSION_INT stores the radius an a 32-bit integer in
 // metres.  This was a bug, and CIRCLE_INCLUSION was created to store
 // as a 32-bit float instead.  We save as _INT in the case that the
-// radius looks like an integer as a backwards-compatability measure.
+// radius looks like an integer as a backwards-compatibility measure.
 // For 4.2 we might consider only loading _INT and always saving as
 // float, and in 4.3 considering _INT invalid
 enum class AC_PolyFenceType {
@@ -186,6 +186,11 @@ public:
     }
 
 
+#if AP_SDCARD_STORAGE_ENABLED
+    bool failed_sdcard_storage(void) const {
+        return _failed_sdcard_storage;
+    }
+#endif
 
 private:
     // multi-thread access support
@@ -352,7 +357,7 @@ private:
 
 #if AC_POLYFENCE_FENCE_POINT_PROTOCOL_SUPPORT
     /*
-     * FENCE_POINT protocol compatability
+     * FENCE_POINT protocol compatibility
      */
     void handle_msg_fetch_fence_point(GCS_MAVLINK &link, const mavlink_message_t& msg);
     void handle_msg_fence_point(GCS_MAVLINK &link, const mavlink_message_t& msg);
@@ -380,7 +385,7 @@ private:
     bool write_eos_to_storage(uint16_t &offset);
 
     // _total - reference to FENCE_TOTAL parameter.  This is used
-    // solely for compatability with the FENCE_POINT protocol
+    // solely for compatibility with the FENCE_POINT protocol
     AP_Int8 &_total;
     const AP_Int16 &_options;
     uint8_t _old_total;
@@ -423,6 +428,11 @@ private:
     bool index_eeprom() WARN_IF_UNUSED;
 
     uint16_t fence_storage_space_required(const AC_PolyFenceItem *new_items, uint16_t count);
+
+#if AP_SDCARD_STORAGE_ENABLED
+    // true if we failed to load SDCard storage on init
+    bool _failed_sdcard_storage;
+#endif
 };
 
 #endif // AP_FENCE_ENABLED

@@ -97,6 +97,9 @@ public:
 #if AP_NOTIFY_DISCRETE_RGB_ENABLED
         Notify_LED_DiscreteRGB              = (1 << 17), // DiscreteRGB
 #endif
+#if AP_NOTIFY_NEOPIXEL_ENABLED
+        Notify_LED_NeoPixelRGB              = (1 << 18), // NeoPixel AdaFruit 4544 Worldsemi WS2811
+#endif
         Notify_LED_MAX
     };
 
@@ -207,12 +210,19 @@ public:
     void send_text(const char *str);
     const char* get_text() const { return _send_text; }
     uint32_t get_text_updated_millis() const {return _send_text_updated_millis; }
+ 
+#if AP_SCRIPTING_ENABLED
+    // send text to the display using scripting
+    void send_text_scripting(const char *str, uint8_t r);
+    void release_text_scripting(uint8_t r);
+#endif
 
     static const struct AP_Param::GroupInfo var_info[];
     int8_t get_buzz_pin() const  { return _buzzer_pin; }
     uint8_t get_buzz_level() const  { return _buzzer_level; }
     uint8_t get_buzz_volume() const  { return _buzzer_volume; }
     uint8_t get_led_len() const { return _led_len; }
+    uint32_t get_led_type() const { return _led_type; }
     int8_t get_rgb_led_brightness_percent() const;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL

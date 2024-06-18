@@ -1,3 +1,7 @@
+#include "AP_Mission_config.h"
+
+#if AP_MISSION_ENABLED
+
 #include "AP_Mission.h"
 
 #include <GCS_MAVLink/GCS.h>
@@ -10,6 +14,7 @@
 #include <RC_Channel/RC_Channel.h>
 #include <AP_Mount/AP_Mount.h>
 
+#if AP_RC_CHANNEL_ENABLED
 bool AP_Mission::start_command_do_aux_function(const AP_Mission::Mission_Command& cmd)
 {
     const RC_Channel::AUX_FUNC function = (RC_Channel::AUX_FUNC)cmd.content.auxfunction.function;
@@ -28,25 +33,23 @@ bool AP_Mission::start_command_do_aux_function(const AP_Mission::Mission_Command
     rc().run_aux_function(function, pos, RC_Channel::AuxFuncTriggerSource::MISSION);
     return true;
 }
+#endif  // AP_RC_CHANNEL_ENABLED
 
 #if AP_GRIPPER_ENABLED
 bool AP_Mission::start_command_do_gripper(const AP_Mission::Mission_Command& cmd)
 {
-    AP_Gripper *gripper = AP::gripper();
-    if (gripper == nullptr) {
-        return false;
-    }
+    AP_Gripper &gripper = AP::gripper();
 
     // Note: we ignore the gripper num parameter because we only
     // support one gripper
     switch (cmd.content.gripper.action) {
     case GRIPPER_ACTION_RELEASE:
-        gripper->release();
+        gripper.release();
         // Log_Write_Event(DATA_GRIPPER_RELEASE);
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Gripper Released");
         return true;
     case GRIPPER_ACTION_GRAB:
-        gripper->grab();
+        gripper.grab();
         // Log_Write_Event(DATA_GRIPPER_GRAB);
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Gripper Grabbed");
         return true;
@@ -162,9 +165,49 @@ bool AP_Mission::start_command_camera(const AP_Mission::Mission_Command& cmd)
         }
         return false;
 
+#if AP_CAMERA_SET_CAMERA_SOURCE_ENABLED
+    case MAV_CMD_SET_CAMERA_SOURCE:
+        if (cmd.content.set_camera_source.instance == 0) {
+            // set lens for every backend
+            bool ret = false;
+            for (uint8_t i=0; i<AP_CAMERA_MAX_INSTANCES; i++) {
+                ret |= camera->set_camera_source(i, (AP_Camera::CameraSource)cmd.content.set_camera_source.primary_source, (AP_Camera::CameraSource)cmd.content.set_camera_source.secondary_source);
+            }
+            return ret;
+        }
+        return camera->set_camera_source(cmd.content.set_camera_source.instance-1, (AP_Camera::CameraSource)cmd.content.set_camera_source.primary_source, (AP_Camera::CameraSource)cmd.content.set_camera_source.secondary_source);
+#endif
+
     case MAV_CMD_IMAGE_START_CAPTURE:
-        camera->take_picture();
-        return true;
+        // check if this is a single picture request (e.g. total images is 1 or interval and total images are zero)
+        if ((cmd.content.image_start_capture.total_num_images == 1) ||
+            (cmd.content.image_start_capture.total_num_images == 0 && is_zero(cmd.content.image_start_capture.interval_s))) {
+            if (cmd.content.image_start_capture.instance == 0) {
+                // take pictures for every backend
+                return camera->take_picture();
+            }
+            return camera->take_picture(cmd.content.image_start_capture.instance-1);
+        } else if (cmd.content.image_start_capture.total_num_images == 0) {
+            // multiple picture request, take pictures forever
+            if (cmd.content.image_start_capture.instance == 0) {
+                // take pictures for every backend
+                return camera->take_multiple_pictures(cmd.content.image_start_capture.interval_s*1000, -1);
+            }
+            return camera->take_multiple_pictures(cmd.content.image_start_capture.instance-1, cmd.content.image_start_capture.interval_s*1000, -1);
+        } else {
+            if (cmd.content.image_start_capture.instance == 0) {
+                // take pictures for every backend
+                return camera->take_multiple_pictures(cmd.content.image_start_capture.interval_s*1000, cmd.content.image_start_capture.total_num_images);
+            }
+            return camera->take_multiple_pictures(cmd.content.image_start_capture.instance-1, cmd.content.image_start_capture.interval_s*1000, cmd.content.image_start_capture.total_num_images);
+        }
+    case MAV_CMD_IMAGE_STOP_CAPTURE:
+        if (cmd.p1 == 0) {
+            // stop capture for each backend
+            camera->stop_capture();
+            return true;
+        }
+        return camera->stop_capture(cmd.p1 - 1);
 
     case MAV_CMD_VIDEO_START_CAPTURE:
     case MAV_CMD_VIDEO_STOP_CAPTURE:
@@ -303,3 +346,5 @@ bool AP_Mission::start_command_do_gimbal_manager_pitchyaw(const AP_Mission::Miss
     // if we got this far then message is not handled
     return false;
 }
+
+#endif  // AP_MISSION_ENABLED

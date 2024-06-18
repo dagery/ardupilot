@@ -280,8 +280,9 @@ TEST(Location, Tests)
     EXPECT_EQ(0, test_location4.loiter_xtrack);
     EXPECT_TRUE(test_location4.initialised());
 
-    const Location test_location_empty{test_vect, Location::AltFrame::ABOVE_HOME};
-    EXPECT_FALSE(test_location_empty.get_vector_from_origin_NEU(test_vec3));
+    // can't create a Location using a vector here as there's no origin for the vector to be relative to:
+    // const Location test_location_empty{test_vect, Location::AltFrame::ABOVE_HOME};
+    // EXPECT_FALSE(test_location_empty.get_vector_from_origin_NEU(test_vec3));
 }
 
 TEST(Location, Distance)
@@ -371,7 +372,7 @@ TEST(Location, Line)
 }
 
 /*
-  check if we obey basic euclidian geometry rules of position
+  check if we obey basic euclidean geometry rules of position
   addition/subtraction
  */
 TEST(Location, OffsetError)

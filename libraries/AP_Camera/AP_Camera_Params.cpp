@@ -77,7 +77,7 @@ const AP_Param::GroupInfo AP_Camera_Params::var_info[] = {
     // @Param: _OPTIONS
     // @DisplayName: Camera options
     // @Description: Camera options bitmask
-    // @Bitmask: 0:None,1: Recording Starts at arming and stops at disarming
+    // @Bitmask: 0:Recording Starts at arming and stops at disarming
     // @User: Standard
     AP_GROUPINFO("_OPTIONS", 10, AP_Camera_Params, options, 0),
 
@@ -86,6 +86,22 @@ const AP_Param::GroupInfo AP_Camera_Params::var_info[] = {
     // @Description: Mount instance camera is associated with. 0 means camera and mount have identical instance numbers e.g. camera1 and mount1
     // @User: Standard
     AP_GROUPINFO("_MNT_INST", 11, AP_Camera_Params, mount_instance, 0),
+
+    // @Param: _HFOV
+    // @DisplayName: Camera horizontal field of view
+    // @Description: Camera horizontal field of view. 0 if unknown
+    // @Units: deg
+    // @Range: 0 360
+    // @User: Standard
+    AP_GROUPINFO("_HFOV", 12, AP_Camera_Params, hfov, 0),
+
+    // @Param: _VFOV
+    // @DisplayName: Camera vertical field of view
+    // @Description: Camera vertical field of view. 0 if unknown
+    // @Units: deg
+    // @Range: 0 180
+    // @User: Standard
+    AP_GROUPINFO("_VFOV", 13, AP_Camera_Params, vfov, 0),
 
     AP_GROUPEND
 

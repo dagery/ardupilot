@@ -7,7 +7,7 @@ import sys
 try:
     import em
 except ImportError:
-    print("you need to install empy with 'python -m pip install empy'")
+    print("you need to install empy with 'python -m pip install empy==3.3.4'")
     sys.exit(1)
 
 try:
@@ -80,7 +80,10 @@ def build(bld):
                      'AP_SBusOut',
                      'AP_RobotisServo',
                      'AP_FETtecOneWire',
+                     'GCS_MAVLink',
+                     'AP_Relay'
                      ]
+
     bld.ap_stlib(
         name= 'AP_Periph_libs',
         dynamic_source='modules/DroneCAN/libcanard/dsdlc_generated/src/**.c',

@@ -47,15 +47,15 @@ void RGBLed::_set_rgb(uint8_t red, uint8_t green, uint8_t blue)
     }
 }
 
-RGBLed::rgb_source_t RGBLed::rgb_source() const
+RGBLed::Source RGBLed::rgb_source() const
 {
-    return rgb_source_t(pNotify->_rgb_led_override.get());
+    return Source(pNotify->_rgb_led_override.get());
 }
 
 // set_rgb - set color as a combination of red, green and blue values
 void RGBLed::set_rgb(uint8_t red, uint8_t green, uint8_t blue)
 {
-    if (rgb_source() == mavlink) {
+    if (rgb_source() == Source::mavlink) {
         // don't set if in override mode
         return;
     }
@@ -138,10 +138,12 @@ uint32_t RGBLed::get_colour_sequence(void) const
 
     // solid green or blue if armed
     if (AP_Notify::flags.armed) {
+#if AP_GPS_ENABLED
         // solid green if armed with GPS 3d lock
         if (AP_Notify::flags.gps_status >= AP_GPS::GPS_OK_FIX_3D) {
             return sequence_armed;
         }
+#endif
         // solid blue if armed with no GPS lock
         return sequence_armed_nogps;
     }
@@ -150,6 +152,7 @@ uint32_t RGBLed::get_colour_sequence(void) const
     if (!AP_Notify::flags.pre_arm_check) {
         return sequence_prearm_failing;
     }
+#if AP_GPS_ENABLED
     if (AP_Notify::flags.gps_status >= AP_GPS::GPS_OK_FIX_3D_DGPS && AP_Notify::flags.pre_arm_gps_check) {
         return sequence_disarmed_good_dgps;
     }
@@ -157,6 +160,7 @@ uint32_t RGBLed::get_colour_sequence(void) const
     if (AP_Notify::flags.gps_status >= AP_GPS::GPS_OK_FIX_3D && AP_Notify::flags.pre_arm_gps_check) {
         return sequence_disarmed_good_gps;
     }
+#endif
 
     return sequence_disarmed_bad_gps;
 }
@@ -192,16 +196,16 @@ void RGBLed::update()
     uint32_t current_colour_sequence = 0;
 
     switch (rgb_source()) {
-    case mavlink:
+    case Source::mavlink:
         update_override();
         return; // note this is a return not a break!
-    case standard:
+    case Source::standard:
         current_colour_sequence = get_colour_sequence();
         break;
-    case obc:
+    case Source::obc:
         current_colour_sequence = get_colour_sequence_obc();
         break;
-    case traffic_light:
+    case Source::traffic_light:
         current_colour_sequence = get_colour_sequence_traffic_light();
         break;
     }
@@ -231,7 +235,7 @@ void RGBLed::update()
 */
 void RGBLed::handle_led_control(const mavlink_message_t &msg)
 {
-    if (rgb_source() != mavlink) {
+    if (rgb_source() != Source::mavlink) {
         // ignore LED_CONTROL commands if not in LED_OVERRIDE mode
         return;
     }

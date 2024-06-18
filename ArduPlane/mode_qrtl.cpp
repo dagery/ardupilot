@@ -103,6 +103,9 @@ void ModeQRTL::run()
             // nav roll and pitch are controller by position controller
             plane.nav_roll_cd = pos_control->get_roll_cd();
             plane.nav_pitch_cd = pos_control->get_pitch_cd();
+
+            plane.quadplane.assign_tilt_to_fwd_thr();
+
             if (quadplane.transition->set_VTOL_roll_pitch_limit(plane.nav_roll_cd, plane.nav_pitch_cd)) {
                 pos_control->set_externally_limited_xy();
             }
@@ -123,7 +126,7 @@ void ModeQRTL::run()
 
             ftype alt_diff;
             if (!stopping_loc.get_alt_distance(plane.next_WP_loc, alt_diff) || is_positive(alt_diff)) {
-                // climb finshed or cant get alt diff, head home
+                // climb finished or cant get alt diff, head home
                 submode = SubMode::RTL;
                 plane.prev_WP_loc = plane.current_loc;
 
@@ -196,9 +199,9 @@ void ModeQRTL::update_target_altitude()
       giving time to lose speed before we transition
      */
     const float radius = MAX(fabsf(float(plane.aparm.loiter_radius)), fabsf(float(plane.g.rtl_radius)));
-    const float rtl_alt_delta = MAX(0, plane.g.RTL_altitude_cm*0.01 - plane.quadplane.qrtl_alt);
+    const float rtl_alt_delta = MAX(0, plane.g.RTL_altitude - plane.quadplane.qrtl_alt);
     const float sink_time = rtl_alt_delta / MAX(0.6*plane.TECS_controller.get_max_sinkrate(), 1);
-    const float sink_dist = plane.aparm.airspeed_cruise_cm * 0.01 * sink_time;
+    const float sink_dist = plane.aparm.airspeed_cruise * sink_time;
     const float dist = plane.auto_state.wp_distance;
     const float rad_min = 2*radius;
     const float rad_max = 20*radius;
@@ -208,7 +211,6 @@ void ModeQRTL::update_target_altitude()
     Location loc = plane.next_WP_loc;
     loc.alt += alt*100;
     plane.set_target_altitude_location(loc);
-    plane.altitude_error_cm = plane.calc_altitude_error_cm();
 }
 
 // only nudge during approach

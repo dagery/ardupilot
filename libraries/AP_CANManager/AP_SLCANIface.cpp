@@ -561,11 +561,11 @@ void SLCAN::CANIface::update_slcan_port()
     }
 }
 
-bool SLCAN::CANIface::set_event_handle(AP_HAL::EventHandle* evt_handle)
+bool SLCAN::CANIface::set_event_handle(AP_HAL::BinarySemaphore *sem_handle)
 {
     // When in passthrough mode methods is handled through can iface
     if (_can_iface) {
-        return _can_iface->set_event_handle(evt_handle);
+        return _can_iface->set_event_handle(sem_handle);
     }
     return false;
 }
@@ -715,7 +715,7 @@ int16_t SLCAN::CANIface::receive(AP_HAL::CANFrame& out_frame, uint64_t& rx_time,
         }
     }
 
-    // We found nothing in HAL's CANIface recieve, so look in SLCANIface
+    // We found nothing in HAL's CANIface receive, so look in SLCANIface
     if (_port == nullptr) {
         return 0;
     }

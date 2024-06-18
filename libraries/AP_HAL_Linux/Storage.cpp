@@ -9,7 +9,6 @@
 #include <unistd.h>
 
 #include <AP_HAL/AP_HAL.h>
-#include <AP_Vehicle/AP_Vehicle_Type.h>
 
 using namespace Linux;
 
@@ -20,7 +19,7 @@ using namespace Linux;
 
 // name the storage file after the sketch so you can use the same board
 // card for ArduCopter and ArduPlane
-#define STORAGE_FILE SKETCHNAME ".stg"
+#define STORAGE_FILE AP_BUILD_TARGET_NAME ".stg"
 
 extern const AP_HAL::HAL& hal;
 

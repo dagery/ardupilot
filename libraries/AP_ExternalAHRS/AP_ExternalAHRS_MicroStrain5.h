@@ -11,7 +11,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 /*
-  suppport for MicroStrain CX5/GX5-45 serially connected AHRS Systems
+  support for MicroStrain CX5/GX5-45 serially connected AHRS Systems
  */
 
 #pragma once
@@ -48,6 +48,12 @@ public:
     void update() override {
         build_packet();
     };
+
+protected:
+
+    uint8_t num_gps_sensors(void) const override {
+        return 1;
+    }
 
 private:
 

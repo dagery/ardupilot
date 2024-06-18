@@ -3,9 +3,12 @@
 #include <AP_HAL/AP_HAL_Boards.h>
 #include <AP_HAL/Semaphores.h>
 #include <AP_Param/AP_Param.h>
+#include <AP_GPS/AP_GPS_config.h>
+#include <AP_BoardConfig/AP_BoardConfig_config.h>
 
 #include "AP_Arming_config.h"
 #include "AP_InertialSensor/AP_InertialSensor_config.h"
+#include "AP_Proximity/AP_Proximity_config.h"
 
 class AP_Arming {
 public:
@@ -139,11 +142,14 @@ public:
     
     // enum for ARMING_OPTIONS parameter
     enum class Option : int32_t {
-        DISABLE_PREARM_DISPLAY   = (1U << 0),
+        DISABLE_PREARM_DISPLAY             = (1U << 0),
+        DISABLE_STATUSTEXT_ON_STATE_CHANGE = (1U << 1),
     };
     bool option_enabled(Option option) const {
         return (_arming_options & uint32_t(option)) != 0;
     }
+
+    void send_arm_disarm_statustext(const char *string) const;
 
     static bool method_is_GCS(Method method) {
         return (method == Method::MAVLINK || method == Method::DDS);
@@ -226,15 +232,19 @@ protected:
     
     bool estop_checks(bool display_failure);
 
+#if AP_ARMING_CRASHDUMP_ACK_ENABLED
+    bool crashdump_checks(bool report);
+#endif
+
     virtual bool system_checks(bool report);
 
     bool can_checks(bool report);
 
     bool fettec_checks(bool display_failure) const;
 
-    bool kdecan_checks(bool display_failure) const;
-
+#if HAL_PROXIMITY_ENABLED
     virtual bool proximity_checks(bool report) const;
+#endif
 
     bool servo_checks(bool report) const;
     bool rc_checks_copter_sub(bool display_failure, const class RC_Channel *channels[4]) const;
@@ -300,6 +310,23 @@ private:
 
     uint32_t last_prearm_display_ms;  // last time we send statustexts for prearm failures
     bool running_arming_checks;  // true if the arming checks currently being performed are being done because the vehicle is trying to arm the vehicle
+    
+    bool last_prearm_checks_result; // result of last prearm check
+    bool report_immediately; // set to true when check goes from true to false, to trigger immediate report
+
+    void update_arm_gpio();
+
+#if !AP_GPS_BLENDED_ENABLED
+    bool blending_auto_switch_checks(bool report);
+#endif
+
+#if AP_ARMING_CRASHDUMP_ACK_ENABLED
+    struct CrashDump {
+        void check_reset();
+        AP_Int8  acked;
+    } crashdump_ack;
+#endif  // AP_ARMING_CRASHDUMP_ACK_ENABLED
+
 };
 
 namespace AP {

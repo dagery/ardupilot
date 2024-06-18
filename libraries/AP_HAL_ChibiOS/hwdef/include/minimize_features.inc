@@ -22,9 +22,6 @@ define HAL_RUNCAM_ENABLED 0
 # minimized boards don't get configuration via SmartAudio by default:
 define AP_SMARTAUDIO_ENABLED 0
 
-# can't fit Turtle mode on minimized boards:
-define MODE_TURTLE_ENABLED 0
-
 # no Spektrum telemetry:
 define HAL_SPEKTRUM_TELEM_ENABLED 0
 
@@ -33,5 +30,4 @@ define HAL_MSP_ENABLED 0
 
 # Copter-specific defines; these defines are only used in the Copter
 #  directory, but are seen across the entire codebase:
-define MODE_FLOWHOLD_ENABLED 0
 define MODE_TURTLE_ENABLED 0

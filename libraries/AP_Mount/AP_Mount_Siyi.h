@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "AP_Mount_Backend.h"
+#include "AP_Mount_Backend_Serial.h"
 
 #if HAL_MOUNT_SIYI_ENABLED
 
@@ -27,20 +27,17 @@
 #include <AP_Math/AP_Math.h>
 #include <AP_Common/AP_Common.h>
 
-#define AP_MOUNT_SIYI_PACKETLEN_MAX     22  // maximum number of bytes in a packet sent to or received from the gimbal
+#define AP_MOUNT_SIYI_PACKETLEN_MAX     38  // maximum number of bytes in a packet sent to or received from the gimbal
 
-class AP_Mount_Siyi : public AP_Mount_Backend
+class AP_Mount_Siyi : public AP_Mount_Backend_Serial
 {
 
 public:
     // Constructor
-    using AP_Mount_Backend::AP_Mount_Backend;
+    using AP_Mount_Backend_Serial::AP_Mount_Backend_Serial;
 
     /* Do not allow copies */
     CLASS_NO_COPY(AP_Mount_Siyi);
-
-    // init - performs any required initialisation for this instance
-    void init() override;
 
     // update mount position - should be called periodically
     void update() override;
@@ -75,6 +72,10 @@ public:
     // set camera lens as a value from 0 to 8.  ZT30 only
     bool set_lens(uint8_t lens) override;
 
+    // set_camera_source is functionally the same as set_lens except primary and secondary lenses are specified by type
+    // primary and secondary sources use the AP_Camera::CameraSource enum cast to uint8_t
+    bool set_camera_source(uint8_t primary_source, uint8_t secondary_source) override;
+
     // send camera information message to GCS
     void send_camera_information(mavlink_channel_t chan) const override;
 
@@ -93,6 +94,12 @@ protected:
     // get attitude as a quaternion.  returns true on success
     bool get_attitude_quaternion(Quaternion& att_quat) override;
 
+    // get angular velocity of mount. Only available on some backends
+    bool get_angular_velocity(Vector3f& rates) override {
+        rates = _current_rates_rads;
+        return true;
+    }
+    
 private:
 
     // serial protocol command ids
@@ -111,6 +118,8 @@ private:
         ABSOLUTE_ZOOM = 0x0F,
         SET_CAMERA_IMAGE_TYPE = 0x11,
         READ_RANGEFINDER = 0x15,
+        EXTERNAL_ATTITUDE = 0x22,
+        SET_TIME = 0x30,
     };
 
     // Function Feedback Info packet info_type values
@@ -157,12 +166,46 @@ private:
         ZT30
     } _hardware_model;
 
-    // lens value
+    enum class HdrStatus : uint8_t {
+        OFF = 0,
+        ON  = 1,
+    };
+
+    enum class RecordingStatus : uint8_t {
+        OFF       = 0,
+        ON        = 1,
+        NO_CARD   = 2,
+        DATA_LOSS = 3,
+    };
+
+    enum class GimbalMotionMode : uint8_t {
+        LOCK   = 0,
+        FOLLOW = 1,
+        FPV    = 2,
+    };
+
     enum class GimbalMountingDirection : uint8_t {
         UNDEFINED = 0,
         NORMAL = 1,
         UPSIDE_DOWN = 2,
-    } _gimbal_mounting_dir;
+    };
+
+    enum class VideoOutputStatus : uint8_t {
+        HDMI = 0,
+        CVBS = 1,
+    };
+
+    // Response message for "Acquire Gimbal Confuguration Information" (0x0A)
+    typedef struct {
+        uint8_t _reserved1;
+        HdrStatus hdr_status;
+        uint8_t _reserved3;
+        RecordingStatus record_status;
+        GimbalMotionMode motion_mode;
+        GimbalMountingDirection mounting_dir;
+        VideoOutputStatus video_mode;
+    } GimbalConfigInfo;
+    static_assert(sizeof(GimbalConfigInfo) == 7, "GimbalConfigInfo must be 7 bytes");
 
     // camera image types (aka lens)
     enum class CameraImageType : uint8_t {
@@ -213,10 +256,12 @@ private:
     // yaw_is_ef should be true if gimbal should maintain an earth-frame target (aka lock)
     void rotate_gimbal(int8_t pitch_scalar, int8_t yaw_scalar, bool yaw_is_ef);
 
-    // set gimbal's lock vs follow mode
-    // lock should be true if gimbal should maintain an earth-frame target
-    // lock is false to follow / maintain a body-frame target
-    void set_lock(bool lock);
+    // Set gimbal's motion mode if it has changed. Use force=true to always send.
+    //   FOLLOW: roll and pitch are in earth-frame, yaw is in body-frame
+    //   LOCK: roll, pitch and yaw are all in earth-frame
+    //   FPV: roll, pitch and yaw are all in body-frame
+    // Returns true if message successfully sent to Gimbal
+    bool set_motion_mode(const GimbalMotionMode mode, const bool force=false);
 
     // send target pitch and yaw rates to gimbal
     // yaw_is_ef should be true if yaw_rads target is an earth frame rate, false if body_frame
@@ -245,8 +290,6 @@ private:
     void check_firmware_version() const;
 
     // internal variables
-    AP_HAL::UARTDriver *_uart;                      // uart connected to gimbal
-    bool _initialised;                              // true once the driver has been initialised
     bool _got_hardware_id;                          // true once hardware id ha been received
 
     FirmwareVersion _fw_version;                    // firmware version (for reporting for GCS)
@@ -268,16 +311,12 @@ private:
     // variables for sending packets to gimbal
     uint32_t _last_send_ms;                         // system time (in milliseconds) of last packet sent to gimbal
     uint16_t _last_seq;                             // last sequence number used (should be increment for each send)
-    bool     _last_lock;                            // last lock value sent to gimbal
-    uint8_t  _lock_send_counter;                    // counter used to resend lock status to gimbal at regular intervals
 
     // actual attitude received from gimbal
     Vector3f _current_angle_rad;                    // current angles in radians received from gimbal (x=roll, y=pitch, z=yaw)
+    Vector3f _current_rates_rads;                   // current angular rates in rad/s (x=roll, y=pitch, z=yaw)
     uint32_t _last_current_angle_rad_ms;            // system time _current_angle_rad was updated
     uint32_t _last_req_current_angle_rad_ms;        // system time that this driver last requested current angle
-
-    // variables for camera state
-    bool _last_record_video;                        // last record_video state sent to gimbal
 
     // absolute zoom control.  only used for A8 that does not support abs zoom control
     ZoomType _zoom_type;                            // current zoom type
@@ -285,10 +324,17 @@ private:
     float _zoom_mult;                               // most recent actual zoom multiple received from camera
     uint32_t _last_zoom_control_ms;                 // system time that zoom control was last run
 
+    // Configuration info received from gimbal
+    GimbalConfigInfo _config_info;
+    
     // rangefinder variables
     uint32_t _last_rangefinder_req_ms;              // system time of last request for rangefinder distance
     uint32_t _last_rangefinder_dist_ms;             // system time of last successful read of rangefinder distance
     float _rangefinder_dist_m;                      // distance received from rangefinder
+
+    // sending of attitude to gimbal
+    uint32_t _last_attitude_send_ms;
+    void send_attitude(void);
 
     // hardware lookup table indexed by HardwareModel enum values (see above)
     struct HWInfo {
@@ -296,6 +342,9 @@ private:
         const char* model_name;
     };
     static const HWInfo hardware_lookup_table[];
+
+    // count of SET_TIME packets, we send 5 times to cope with packet loss
+    uint8_t sent_time_count;
 };
 
 #endif // HAL_MOUNT_SIYISERIAL_ENABLED

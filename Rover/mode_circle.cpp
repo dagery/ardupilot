@@ -116,7 +116,7 @@ void ModeCircle::init_target_yaw_rad()
     // if no position estimate use vehicle yaw
     Vector2f curr_pos_NE;
     if (!AP::ahrs().get_relative_position_NE_origin(curr_pos_NE)) {
-        target.yaw_rad = AP::ahrs().yaw;
+        target.yaw_rad = AP::ahrs().get_yaw();
         return;
     }
 
@@ -126,7 +126,7 @@ void ModeCircle::init_target_yaw_rad()
 
     // if current position is exactly at the center of the circle return vehicle yaw
     if (is_zero(dist_m)) {
-        target.yaw_rad = AP::ahrs().yaw;
+        target.yaw_rad = AP::ahrs().get_yaw();
     } else {
         target.yaw_rad = center_to_veh.angle();
     }
@@ -149,7 +149,7 @@ void ModeCircle::update()
     _distance_to_destination = center_to_veh.length();
     dist_to_edge_m = fabsf(_distance_to_destination - config.radius);
     if (!reached_edge) {
-        const float dist_thresh_m = MAX(rover.g2.turn_radius, AR_CIRCLE_REACHED_EDGE_DIST);
+        const float dist_thresh_m = MAX(g2.turn_radius, AR_CIRCLE_REACHED_EDGE_DIST);
         reached_edge = dist_to_edge_m <= dist_thresh_m;
     }
 
@@ -266,8 +266,8 @@ void ModeCircle::check_config_speed()
 void ModeCircle::check_config_radius()
 {
     // ensure radius is at least as large as vehicle's turn radius
-    if (config.radius < rover.g2.turn_radius) {
-        config.radius = rover.g2.turn_radius;
-        gcs().send_text(MAV_SEVERITY_WARNING, "Circle: radius increased to TURN_RADIUS (%4.1f)", (double)rover.g2.turn_radius);
+    if (config.radius < g2.turn_radius) {
+        config.radius = g2.turn_radius;
+        gcs().send_text(MAV_SEVERITY_WARNING, "Circle: radius increased to TURN_RADIUS (%4.1f)", (double)g2.turn_radius);
     }
 }

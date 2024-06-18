@@ -35,7 +35,7 @@ extern const AP_HAL::HAL& hal;
 #define AC_FENCE_MANUAL_RECOVERY_TIME_MIN           10000   // pilot has 10seconds to recover during which time the autopilot will not attempt to re-take control
 
 #if APM_BUILD_TYPE(APM_BUILD_ArduPlane)
-#define AC_FENCE_CIRCLE_RADIUS_BACKUP_DISTANCE     100.0   // after fence is broken we recreate the fence 50m further out
+#define AC_FENCE_CIRCLE_RADIUS_BACKUP_DISTANCE     100.0   // after fence is broken we recreate the fence 100m further out
 #else
 #define AC_FENCE_CIRCLE_RADIUS_BACKUP_DISTANCE      20.0   // after fence is broken we recreate the fence 20m further out
 #endif
@@ -128,7 +128,7 @@ const AP_Param::GroupInfo AC_Fence::var_info[] = {
 
     // @Param{Plane}: AUTOENABLE
     // @DisplayName: Fence Auto-Enable
-    // @Description: Auto-enable of fence
+    // @Description: Auto-enable of fences. AutoEnableOnTakeoff enables all configured fences after autotakeoffs reach altitude. During autolandings the fences will be disabled.  AutoEnableDisableFloorOnLanding enables all configured fences after autotakeoffs reach altitude. During autolandings only the Minimum Altitude fence will be disabled. AutoEnableOnlyWhenArmed enables all configured fences, but no fences are disabled during autolandings. However, fence breaches are ignored while executing prior breach recovery actions which may include autolandings.
     // @Values: 0:AutoEnableOff,1:AutoEnableOnTakeoff,2:AutoEnableDisableFloorOnLanding,3:AutoEnableOnlyWhenArmed
     // @Range: 0 3
     // @Increment: 1
@@ -160,11 +160,13 @@ AC_Fence::AC_Fence()
 /// enable the Fence code generally; a master switch for all fences
 void AC_Fence::enable(bool value)
 {
+#if HAL_LOGGING_ENABLED
     if (_enabled && !value) {
         AP::logger().Write_Event(LogEvent::FENCE_DISABLE);
     } else if (!_enabled && value) {
         AP::logger().Write_Event(LogEvent::FENCE_ENABLE);
     }
+#endif
     _enabled.set(value);
     if (!value) {
         clear_breach(AC_FENCE_TYPE_ALT_MIN | AC_FENCE_TYPE_ALT_MAX | AC_FENCE_TYPE_CIRCLE | AC_FENCE_TYPE_POLYGON);
@@ -177,19 +179,23 @@ void AC_Fence::enable(bool value)
 /// enable/disable fence floor only
 void AC_Fence::enable_floor()
 {
+#if HAL_LOGGING_ENABLED
     if (!_floor_enabled) {
         // Floor is currently disabled, enable it
         AP::logger().Write_Event(LogEvent::FENCE_FLOOR_ENABLE);
     }
+#endif
     _floor_enabled = true;
 }
 
 void AC_Fence::disable_floor()
 {
+#if HAL_LOGGING_ENABLED
     if (_floor_enabled) {
         // Floor is currently enabled, disable it
         AP::logger().Write_Event(LogEvent::FENCE_FLOOR_DISABLE);
     }
+#endif
     _floor_enabled = false;
     clear_breach(AC_FENCE_TYPE_ALT_MIN);
 }
@@ -199,11 +205,14 @@ void AC_Fence::disable_floor()
 */
 void AC_Fence::auto_enable_fence_after_takeoff(void)
 {
+    if (_enabled) {
+        return;
+    } 
     switch(auto_enabled()) {
         case AC_Fence::AutoEnable::ALWAYS_ENABLED:
         case AC_Fence::AutoEnable::ENABLE_DISABLE_FLOOR_ONLY:
             enable(true);
-            gcs().send_text(MAV_SEVERITY_NOTICE, "Fence enabled (auto enabled)");
+            GCS_SEND_TEXT(MAV_SEVERITY_NOTICE, "Fence enabled (auto enabled)");
             break;
         default:
             // fence does not auto-enable in other takeoff conditions
@@ -219,11 +228,11 @@ void AC_Fence::auto_disable_fence_for_landing(void)
     switch (auto_enabled()) {
         case AC_Fence::AutoEnable::ALWAYS_ENABLED:
             enable(false);
-            gcs().send_text(MAV_SEVERITY_NOTICE, "Fence disabled (auto disable)");
+            GCS_SEND_TEXT(MAV_SEVERITY_NOTICE, "Fence disabled (auto disable)");
             break;
         case AC_Fence::AutoEnable::ENABLE_DISABLE_FLOOR_ONLY:
             disable_floor();
-            gcs().send_text(MAV_SEVERITY_NOTICE, "Fence floor disabled (auto disable)");
+            GCS_SEND_TEXT(MAV_SEVERITY_NOTICE, "Fence floor disabled (auto disable)");
             break;
         default:
             // fence does not auto-disable in other landing conditions
@@ -494,7 +503,7 @@ bool AC_Fence::check_fence_polygon()
 /// check_fence_circle - returns true if the circle fence (defined via
 /// parameters) has been freshly breached.  May also set up a backup
 /// fence outside the fence and return a fresh breach if that backup
-/// fence is breaced.
+/// fence is breached.
 bool AC_Fence::check_fence_circle()
 {
     if (!(_enabled_fences & AC_FENCE_TYPE_CIRCLE)) {
@@ -518,7 +527,7 @@ bool AC_Fence::check_fence_circle()
         if (!(_breached_fences & AC_FENCE_TYPE_CIRCLE) ||
             (!is_zero(_circle_radius_backup) && _home_distance >= _circle_radius_backup)) {
             // new breach
-            // create a backup fence 20m further out
+            // create a backup fence 20m or 100m further out
             record_breach(AC_FENCE_TYPE_CIRCLE);
             _circle_radius_backup = _home_distance + AC_FENCE_CIRCLE_RADIUS_BACKUP_DISTANCE;
             return true;
