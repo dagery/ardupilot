@@ -73,6 +73,7 @@ BUILD_OPTIONS = [
     Feature('Telemetry', 'FrSky D', 'AP_FRSKY_D_TELEM_ENABLED', 'Enable FrSkyD Telemetry', 0, 'FrSky'),
     Feature('Telemetry', 'FrSky SPort', 'AP_FRSKY_SPORT_TELEM_ENABLED', 'Enable FrSkySPort Telemetry', 0, 'FrSky'),  # noqa
     Feature('Telemetry', 'FrSky SPort PassThrough', 'AP_FRSKY_SPORT_PASSTHROUGH_ENABLED', 'Enable FrSkySPort PassThrough Telemetry', 0, 'FrSky SPort,FrSky'),  # noqa
+    Feature('Telemetry', 'Bidirectional FrSky Telemetry', 'HAL_WITH_FRSKY_TELEM_BIDIRECTIONAL', 'Enable Bidirectional FrSky telemetry', 0, 'FrSky SPort'),  # noqa
     Feature('Telemetry', 'GHST', 'AP_GHST_TELEM_ENABLED', 'Enable Ghost Telemetry', 0, "RC_GHST"), # noqa
 
     Feature('Notify', 'PLAY_TUNE', 'AP_NOTIFY_MAVLINK_PLAY_TUNE_SUPPORT_ENABLED', 'Enable MAVLink Play Tune', 0, None),  # noqa
@@ -175,6 +176,7 @@ BUILD_OPTIONS = [
     Feature('Gimbal', 'SOLOGIMBAL', 'HAL_SOLO_GIMBAL_ENABLED', 'Enable Solo Gimbal', 0, "MOUNT"),
     Feature('Gimbal', 'STORM32_MAVLINK', 'HAL_MOUNT_STORM32MAVLINK_ENABLED', 'Enable SToRM32 MAVLink Gimbal', 0, "MOUNT"),
     Feature('Gimbal', 'STORM32_SERIAL', 'HAL_MOUNT_STORM32SERIAL_ENABLED', 'Enable SToRM32 Serial Gimbal', 0, "MOUNT"),
+    Feature('Gimbal', 'TOPOTEK', 'HAL_MOUNT_TOPOTEK_ENABLED', 'Enable Topotek Gimbal', 0, "MOUNT"),
     Feature('Gimbal', 'XACTI', 'HAL_MOUNT_XACTI_ENABLED', 'Enable Xacti Gimbal', 0, "MOUNT,DroneCAN"),
     Feature('Gimbal', 'VIEWPRO', 'HAL_MOUNT_VIEWPRO_ENABLED', 'Enable Viewpro Gimbal', 0, "MOUNT"),
 
@@ -190,6 +192,9 @@ BUILD_OPTIONS = [
     Feature('Payload', 'SPRAYER', 'HAL_SPRAYER_ENABLED', 'Enable Sprayer', 0, None),
     Feature('Payload', 'LANDING_GEAR', 'AP_LANDINGGEAR_ENABLED', 'Enable Landing Gear', 0, None),
     Feature('Payload', 'WINCH', 'AP_WINCH_ENABLED', 'Enable Winch', 0, None),
+    Feature('Payload', 'WINCH_DAIWA', 'AP_WINCH_DAIWA_ENABLED', 'Enable DAIWA Winch support', 0, 'WINCH'),
+    Feature('Payload', 'WINCH_PWM', 'AP_WINCH_PWM_ENABLED', 'Enable PWM Winch support', 0, 'WINCH'),
+
     Feature('Payload', 'RELAY', 'AP_RELAY_ENABLED', 'Enable Relay support', 0, None),
     Feature('Payload', 'SERVORELAY_EVENTS', 'AP_SERVORELAYEVENTS_ENABLED', 'Enable Servo/Relay Event support', 0, None),
 
@@ -212,6 +217,7 @@ BUILD_OPTIONS = [
     Feature('RC', 'RC_SUMD', 'AP_RCPROTOCOL_SUMD_ENABLED', "Enable SUMD RC Protocol", 0, "RC_Protocol"),   # NOQA: E501
     Feature('RC', 'RC_GHST', 'AP_RCPROTOCOL_GHST_ENABLED', "Enable Ghost RC Protocol", 0, "RC_Protocol"),   # NOQA: E501
     Feature('RC', 'RC_MAVLINK_RADIO', 'AP_RCPROTOCOL_MAVLINK_RADIO_ENABLED', "Enable MAVLink RC Protocol", 0, "RC_Protocol"),   # NOQA: E501
+    Feature('RC', 'RSSI', 'AP_RSSI_ENABLED', 'Enable RSSI handling library', 0, None),
 
     Feature('Rangefinder', 'RANGEFINDER', 'AP_RANGEFINDER_ENABLED', "Enable Rangefinders", 0, None),   # NOQA: E501
     Feature('Rangefinder', 'RANGEFINDER_ANALOG', 'AP_RANGEFINDER_ANALOG_ENABLED', "Enable Rangefinder - Analog", 0, "RANGEFINDER"),   # NOQA: E501
@@ -291,6 +297,7 @@ BUILD_OPTIONS = [
     Feature('Baro', 'ICP101XX', 'AP_BARO_ICP101XX_ENABLED', 'Enable ICP101XX Barometric Sensor', 0, None),
     Feature('Baro', 'ICP201XX', 'AP_BARO_ICP201XX_ENABLED', 'Enable ICP201XX Barometric Sensor', 0, None),
     Feature('Baro', 'BARO_TEMPCAL', 'AP_TEMPCALIBRATION_ENABLED', 'Enable Baro Temperature Calibration', 0, None),
+    Feature('Baro', 'BARO_PROBEXT', 'AP_BARO_PROBE_EXTERNAL_I2C_BUSES', 'Enable Probing of External i2c buses', 0, None),
 
     Feature('Sensors', 'RPM', 'AP_RPM_ENABLED', 'Enable RPM sensors', 0, None),
     Feature('Sensors', 'RPM_EFI', 'AP_RPM_EFI_ENABLED', 'Enable RPM EFI sensors', 0, 'RPM,EFI'),
@@ -315,7 +322,8 @@ BUILD_OPTIONS = [
     Feature('Other', 'NMEA_OUTPUT', 'HAL_NMEA_OUTPUT_ENABLED', 'Enable NMEA Output', 0, None),
     Feature('Other', 'SDCARD_FORMATTING', 'AP_FILESYSTEM_FORMAT_ENABLED', 'Enable formatting of microSD cards', 0, None),
     Feature('Other', 'BOOTLOADER_FLASHING', 'AP_BOOTLOADER_FLASHING_ENABLED', 'Enable Bootloader flashing', 0, "FILESYSTEM_ROMFS"),  # noqa
-    Feature('Other', 'SCRIPTING', 'AP_SCRIPTING_ENABLED', 'Enable LUA Scripting', 0, None),
+    Feature('Other', 'SCRIPTING', 'AP_SCRIPTING_ENABLED', 'Enable Lua scripting', 0, None),
+    Feature('Other', 'SCRIPTING_SERIALDEVICE', 'AP_SCRIPTING_SERIALDEVICE_ENABLED', 'Enable Lua serial device simulation', 0, "SCRIPTING"), # noqa
     Feature('Other', 'SLCAN', 'AP_CAN_SLCAN_ENABLED', 'Enable SLCAN serial protocol', 0, None),
     Feature('Other', 'SDCARD_MISSION', 'AP_SDCARD_STORAGE_ENABLED', 'Enable storing mission on microSD cards', 0, None),
     Feature('Other', 'COMPASS_CAL', 'COMPASS_CAL_ENABLED', 'Enable "tumble" compass calibration', 0, None),
@@ -340,7 +348,9 @@ BUILD_OPTIONS = [
     Feature('MAVLink', 'MAV_SERVO_RELAY', 'AP_MAVLINK_SERVO_RELAY_ENABLED', 'Enable handling of ServoRelay mavlink messages', 0, 'SERVORELAY_EVENTS'),  # noqa
     Feature('MAVLink', 'MAV_MSG_SERIAL_CONTROL', 'AP_MAVLINK_MSG_SERIAL_CONTROL_ENABLED', 'Enable handling of Serial Control mavlink messages', 0, None),  # noqa
     Feature('MAVLink', 'MAVLINK_MSG_MISSION_REQUEST', 'AP_MAVLINK_MSG_MISSION_REQUEST_ENABLED', 'Enable handling of MISSION_REQUEST mavlink messages', 0, None),  # noqa
+    Feature('MAVLink', 'MAVLINK_MSG_RC_CHANNELS_RAW', 'AP_MAVLINK_MSG_RC_CHANNELS_RAW_ENABLED', 'Enable sending of RC_CHANNELS_RAW mavlink messages', 0, None),  # noqa
     Feature('MAVLink', 'AP_MAVLINK_FTP_ENABLED', 'AP_MAVLINK_FTP_ENABLED', 'Enable MAVLink FTP Protocol', 0, None),  # noqa
+    Feature('MAVLink', 'MAV_CMD_SET_HAGL', 'AP_MAVLINK_MAV_CMD_SET_HAGL_ENABLED', 'Enable MAVLink HAGL command', 0, None),  # noqa
 
     Feature('Developer', 'KILL_IMU', 'AP_INERTIALSENSOR_KILL_IMU_ENABLED', 'Allow IMUs to be disabled at runtime', 0, None),
     Feature('Developer', 'CRASHCATCHER', 'AP_CRASHDUMP_ENABLED', 'Enable CrashCatcher', 0, None),

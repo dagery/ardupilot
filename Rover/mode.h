@@ -124,6 +124,9 @@ public:
     // execute the mission in reverse (i.e. backing up)
     void set_reversed(bool value);
 
+    // init reversed flag for autopilot mode
+    virtual void init_reversed_flag() { if (is_autopilot_mode()) { set_reversed(false); } }
+
     // handle tacking request (from auxiliary switch) in sailboats
     virtual void handle_tack_request();
 
@@ -276,6 +279,13 @@ public:
     // lua accessors for nav script time support
     bool nav_script_time(uint16_t &id, uint8_t &cmd, float &arg1, float &arg2, int16_t &arg3, int16_t &arg4);
     void nav_script_time_done(uint16_t id);
+
+    // 
+    void init_reversed_flag() override {
+        if (!mission.is_resume()) {
+            set_reversed(false);
+        }
+    }
 
     AP_Mission mission{
         FUNCTOR_BIND_MEMBER(&ModeAuto::start_command, bool, const AP_Mission::Mission_Command&),
@@ -446,6 +456,12 @@ protected:
 
     // initialise mode
     bool _enter() override;
+
+    // Update position controller targets driving to the circle edge
+    void update_drive_to_radius();
+
+    // Update position controller targets while circling
+    void update_circling();
 
     // initialise target_yaw_rad using the vehicle's position and yaw
     // if there is no current position estimate target_yaw_rad is set to vehicle yaw

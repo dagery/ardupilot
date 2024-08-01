@@ -645,7 +645,9 @@ static const ap_message STREAM_RAW_CONTROLLER_msgs[] = {
 static const ap_message STREAM_RC_CHANNELS_msgs[] = {
     MSG_SERVO_OUTPUT_RAW,
     MSG_RC_CHANNELS,
+#if AP_MAVLINK_MSG_RC_CHANNELS_RAW_ENABLED
     MSG_RC_CHANNELS_RAW, // only sent on a mavlink1 connection
+#endif
 };
 static const ap_message STREAM_EXTRA1_msgs[] = {
     MSG_ATTITUDE,
@@ -840,6 +842,14 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_do_reposition(const mavlink_com
         // if the location wasn't already sane don't load it
         return MAV_RESULT_DENIED;
     }
+
+#if AP_FENCE_ENABLED
+    // reject destination if outside the fence
+    if (!plane.fence.check_destination_within_fence(requested_position)) {
+        LOGGER_WRITE_ERROR(LogErrorSubsystem::NAVIGATION, LogErrorCode::DEST_OUTSIDE_FENCE);
+        return MAV_RESULT_DENIED;
+    }
+#endif
 
     // location is valid load and set
     if (((int32_t)packet.param2 & MAV_DO_REPOSITION_FLAGS_CHANGE_MODE) ||
@@ -1083,6 +1093,12 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
         plane.set_mode(plane.mode_rtl, ModeReason::GCS_COMMAND);
         return MAV_RESULT_ACCEPTED;
 
+#if AP_MAVLINK_MAV_CMD_SET_HAGL_ENABLED
+    case MAV_CMD_SET_HAGL:
+        plane.handle_external_hagl(packet);
+        return MAV_RESULT_ACCEPTED;
+#endif
+        
     default:
         return GCS_MAVLINK::handle_command_int_packet(packet, msg);
     }

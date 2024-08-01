@@ -18,7 +18,9 @@ void Rover::init_ardupilot()
     rpm_sensor.init();
 #endif
 
+#if AP_RSSI_ENABLED
     rssi.init();
+#endif
 
     g2.windvane.init(serial_manager);
 
@@ -40,9 +42,11 @@ void Rover::init_ardupilot()
     airspeed.set_log_bit(MASK_LOG_IMU);
 #endif
 
+#if AP_RANGEFINDER_ENABLED
     // initialise rangefinder
     rangefinder.set_log_rfnd_bit(MASK_LOG_RANGEFINDER);
     rangefinder.init(ROTATION_NONE);
+#endif
 
 #if HAL_PROXIMITY_ENABLED
     // init proximity sensor

@@ -7,7 +7,9 @@
 
 #if HAL_WITH_ESC_TELEM
 
-#define ESC_TELEM_MAX_ESCS NUM_SERVO_CHANNELS
+#ifndef ESC_TELEM_MAX_ESCS
+    #define ESC_TELEM_MAX_ESCS NUM_SERVO_CHANNELS
+#endif
 static_assert(ESC_TELEM_MAX_ESCS > 0, "Cannot have 0 ESC telemetry instances");
 
 #define ESC_TELEM_DATA_TIMEOUT_MS 5000UL
@@ -82,6 +84,9 @@ public:
     // get mask of ESCs that sent valid telemetry data in the last
     // ESC_TELEM_DATA_TIMEOUT_MS
     uint32_t get_active_esc_mask() const;
+
+    // return an active ESC with the highest RPM for the purposes of reporting (e.g. in the OSD)
+    uint8_t get_max_rpm_esc() const;
 
     // return the last time telemetry data was received in ms for the given ESC or 0 if never
     uint32_t get_last_telem_data_ms(uint8_t esc_index) const {

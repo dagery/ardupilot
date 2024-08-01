@@ -169,10 +169,10 @@ public:
     // returns true if the vehicle has crashed
     virtual bool is_crashed() const;
 
-#if AP_EXTERNAL_CONTROL_ENABLED
+#if AP_SCRIPTING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
     // Method to control vehicle position for use by external control
     virtual bool set_target_location(const Location& target_loc) { return false; }
-#endif // AP_EXTERNAL_CONTROL_ENABLED
+#endif // AP_SCRIPTING_ENABLED || AP_EXTERNAL_CONTROL_ENABLED
 #if AP_SCRIPTING_ENABLED
     /*
       methods to control vehicle for use by scripting
@@ -333,7 +333,9 @@ protected:
 #if HAL_BUTTON_ENABLED
     AP_Button button;
 #endif
+#if AP_RANGEFINDER_ENABLED
     RangeFinder rangefinder;
+#endif
 
 #if HAL_LOGGING_ENABLED
     AP_Logger logger;

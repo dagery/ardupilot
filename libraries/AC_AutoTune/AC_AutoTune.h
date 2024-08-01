@@ -67,7 +67,7 @@ public:
 
 protected:
     // axis that can be tuned
-    enum AxisType {
+    enum class AxisType {
         ROLL = 0,                 // roll axis is being tuned (either angle or rate)
         PITCH = 1,                // pitch axis is being tuned (either angle or rate)
         YAW = 2,                  // yaw axis is being tuned using FLTE (either angle or rate)
@@ -197,7 +197,8 @@ protected:
     enum StepType {
         WAITING_FOR_LEVEL = 0,    // autotune is waiting for vehicle to return to level before beginning the next twitch
         TESTING           = 1,    // autotune has begun a test and is watching the resulting vehicle movement
-        UPDATE_GAINS      = 2     // autotune has completed a test and is updating the gains based on the results
+        UPDATE_GAINS      = 2,    // autotune has completed a test and is updating the gains based on the results
+        ABORT             = 3     // load normal gains and return to WAITING_FOR_LEVEL
     };
 
     // mini steps performed while in Tuning mode, Testing step
@@ -259,33 +260,24 @@ protected:
     bool     positive_direction;         // false = tuning in negative direction (i.e. left for roll), true = positive direction (i.e. right for roll)
     StepType step;                       // see StepType for what steps are performed
     TuneType tune_type;                  // see TuneType
-    bool     ignore_next;                // true = ignore the next test
     bool     twitch_first_iter;          // true on first iteration of a twitch (used to signal we must step the attitude or rate target)
     uint8_t  axes_completed;             // bitmask of completed axes
-    float    test_rate_min;                         // the minimum angular rate achieved during TESTING_RATE step-multi only
-    float    test_rate_max;                         // the maximum angular rate achieved during TESTING_RATE step-multi only
-    float    test_angle_min;                        // the minimum angle achieved during TESTING_ANGLE step-multi only
-    float    test_angle_max;                        // the maximum angle achieved during TESTING_ANGLE step-multi only
     uint32_t step_start_time_ms;                    // start time of current tuning step (used for timeout checks)
     uint32_t step_time_limit_ms;                    // time limit of current autotune process
     uint32_t level_start_time_ms;                   // start time of waiting for level
     int8_t   counter;                               // counter for tuning gains
-    float    target_rate;                           // target rate-multi only
-    float    target_angle;                          // target angle-multi only
-    float    start_rate;                            // start rate - parent and multi
     float    start_angle;                           // start angle
-    float    rate_max;                              // maximum rate variable - parent and multi
+    float    start_rate;                            // start rate - parent and multi
     float    test_accel_max;                        // maximum acceleration variable
-    float    step_scaler;                           // scaler to reduce maximum target step - parent and multi
-    float    angle_finish;                           // Angle that test is aborted- parent and multi
     float    desired_yaw_cd;                        // yaw heading during tune - parent and Tradheli
+    float    step_scaler;                           // scaler to reduce maximum target step - parent and multi
 
     LowPassFilterFloat  rotation_rate_filt;         // filtered rotation rate in radians/second
 
     // backup of currently being tuned parameter values
-    float    orig_roll_rp, orig_roll_ri, orig_roll_rd, orig_roll_rff, orig_roll_dff, orig_roll_fltt, orig_roll_smax, orig_roll_sp, orig_roll_accel;
-    float    orig_pitch_rp, orig_pitch_ri, orig_pitch_rd, orig_pitch_rff, orig_pitch_dff, orig_pitch_fltt, orig_pitch_smax, orig_pitch_sp, orig_pitch_accel;
-    float    orig_yaw_rp, orig_yaw_ri, orig_yaw_rd, orig_yaw_rff, orig_yaw_dff, orig_yaw_fltt, orig_yaw_smax, orig_yaw_rLPF, orig_yaw_sp, orig_yaw_accel;
+    float    orig_roll_rp, orig_roll_ri, orig_roll_rd, orig_roll_rff, orig_roll_dff, orig_roll_fltt, orig_roll_smax, orig_roll_sp, orig_roll_accel, orig_roll_rate;
+    float    orig_pitch_rp, orig_pitch_ri, orig_pitch_rd, orig_pitch_rff, orig_pitch_dff, orig_pitch_fltt, orig_pitch_smax, orig_pitch_sp, orig_pitch_accel, orig_pitch_rate;
+    float    orig_yaw_rp, orig_yaw_ri, orig_yaw_rd, orig_yaw_rff, orig_yaw_dff, orig_yaw_fltt, orig_yaw_smax, orig_yaw_rLPF, orig_yaw_sp, orig_yaw_accel, orig_yaw_rate;
     bool     orig_bf_feedforward;
 
     // currently being tuned parameter values
@@ -300,10 +292,8 @@ protected:
     float roll_cd, pitch_cd;
 
     // heli specific variables
-    uint8_t  freq_cnt;                              // dwell test iteration counter
     float    start_freq;                            //start freq for dwell test
     float    stop_freq;                             //ending freq for dwell test
-    bool     ff_up_first_iter;                      // true on first iteration of ff up testing
 
 private:
     // return true if we have a good position estimate

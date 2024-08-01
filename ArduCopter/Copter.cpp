@@ -164,7 +164,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #endif
     SCHED_TASK(auto_disarm_check,     10,     50,  27),
     SCHED_TASK(auto_trim,             10,     75,  30),
-#if RANGEFINDER_ENABLED == ENABLED
+#if AP_RANGEFINDER_ENABLED
     SCHED_TASK(read_rangefinder,      20,    100,  33),
 #endif
 #if HAL_PROXIMITY_ENABLED
@@ -446,15 +446,41 @@ bool Copter::has_ekf_failsafed() const
     return failsafe.ekf;
 }
 
+// get target location (for use by scripting)
+bool Copter::get_target_location(Location& target_loc)
+{
+    return flightmode->get_wp(target_loc);
+}
+
+/*
+  update_target_location() acts as a wrapper for set_target_location
+ */
+bool Copter::update_target_location(const Location &old_loc, const Location &new_loc)
+{
+    /*
+      by checking the caller has provided the correct old target
+      location we prevent a race condition where the user changes mode
+      or commands a different target in the controlling lua script
+    */
+    Location next_WP_loc;
+    flightmode->get_wp(next_WP_loc);
+    if (!old_loc.same_loc_as(next_WP_loc) ||
+         old_loc.get_alt_frame() != new_loc.get_alt_frame()) {
+        return false;
+    }
+
+    return set_target_location(new_loc);
+}
+
 #endif // AP_SCRIPTING_ENABLED
 
-// returns true if vehicle is landing. Only used by Lua scripts
+// returns true if vehicle is landing.
 bool Copter::is_landing() const
 {
     return flightmode->is_landing();
 }
 
-// returns true if vehicle is taking off. Only used by Lua scripts
+// returns true if vehicle is taking off.
 bool Copter::is_taking_off() const
 {
     return flightmode->is_taking_off();
@@ -557,9 +583,11 @@ void Copter::ten_hz_logging_loop()
     }
     if (should_log(MASK_LOG_RCIN)) {
         logger.Write_RCIN();
+#if AP_RSSI_ENABLED
         if (rssi.enabled()) {
             logger.Write_RSSI();
         }
+#endif
     }
     if (should_log(MASK_LOG_RCOUT)) {
         logger.Write_RCOUT();
@@ -631,7 +659,7 @@ void Copter::three_hz_loop()
     // check for deadreckoning failsafe
     failsafe_deadreckon_check();
 
-    // update ch6 in flight tuning
+    //update transmitter based in flight tuning
     tuning();
 
     // check if avoidance should be enabled based on alt
