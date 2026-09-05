@@ -553,7 +553,8 @@ public:
         OSD_SITL=2,
         OSD_MSP=3,
         OSD_TXONLY=4,
-        OSD_MSP_DISPLAYPORT=5
+        OSD_MSP_DISPLAYPORT=5,
+        OSD_INT = 6
     };
 
     bool init_backend(const osd_types type, const uint8_t instance);

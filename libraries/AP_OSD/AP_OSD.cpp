@@ -27,6 +27,7 @@
 #endif
 #include "AP_OSD_MSP.h"
 #include "AP_OSD_MSP_DisplayPort.h"
+#include "AP_OSD_INT.h"
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Util.h>
 #include <RC_Channel/RC_Channel.h>
@@ -46,7 +47,7 @@ const AP_Param::GroupInfo AP_OSD::var_info[] = {
     // @Param: _TYPE
     // @DisplayName: OSD type
     // @Description: OSD type. TXONLY makes the OSD parameter selection available to other modules even if there is no native OSD support on the board, for instance CRSF.
-    // @Values: 0:None,1:MAX7456,2:SITL,3:MSP,4:TXONLY,5:MSP_DISPLAYPORT
+    // @Values: 0:None,1:MAX7456,2:SITL,3:MSP,4:TXONLY,5:MSP_DISPLAYPORT,6:OSD_INT
     // @User: Standard
     // @RebootRequired: True
     AP_GROUPINFO_FLAGS("_TYPE", 1, AP_OSD, osd_type, 0, AP_PARAM_FLAG_ENABLE),
@@ -268,7 +269,7 @@ const AP_Param::GroupInfo AP_OSD::var_info[] = {
     // @Param: _TYPE2
     // @DisplayName: OSD type 2
     // @Description: OSD type 2. TXONLY makes the OSD parameter selection available to other modules even if there is no native OSD support on the board, for instance CRSF.
-    // @Values: 0:None,1:MAX7456,2:SITL,3:MSP,4:TXONLY,5:MSP_DISPLAYPORT
+    // @Values: 0:None,1:MAX7456,2:SITL,3:MSP,4:TXONLY,5:MSP_DISPLAYPORT,6:OSD_INT
     // @User: Standard
     // @RebootRequired: True
     AP_GROUPINFO("_TYPE2", 32, AP_OSD, osd_type2, 0),
@@ -377,7 +378,16 @@ bool AP_OSD::init_backend(const AP_OSD::osd_types type, const uint8_t instance)
         break;
     }
 #endif
+#ifdef HAL_WITH_INT_OSD
+    case OSD_INT: {
+        _backends[instance] = AP_OSD_INT::probe(*this);
+        if (_backends[instance] == nullptr) {
+            break;
+        }
+        DEV_PRINTF("Started Internal OSD\n");
+        break;
     }
+#endif
 #if OSD_ENABLED
     if (_backends[instance] != nullptr) {
         // populate the fonts lookup table
@@ -385,6 +395,7 @@ bool AP_OSD::init_backend(const AP_OSD::osd_types type, const uint8_t instance)
         return true;
     }
 #endif
+    }
     return false;
 }
 
@@ -478,7 +489,6 @@ void AP_OSD::update_stats()
     // maximum altitude
     alt = -alt;
     _stats.max_alt_m = fmaxf(_stats.max_alt_m, alt);
-#if AP_BATTERY_ENABLED
     // maximum current
     AP_BattMonitor &battery = AP::battery();
     float amps;
@@ -490,14 +500,11 @@ void AP_OSD::update_stats()
     if (voltage > 0) {
         _stats.min_voltage_v = fminf(_stats.min_voltage_v, voltage);
     }
-#endif
-#if AP_RSSI_ENABLED
     // minimum rssi
     AP_RSSI *ap_rssi = AP_RSSI::get_singleton();
     if (ap_rssi) {
         _stats.min_rssi = fminf(_stats.min_rssi, ap_rssi->read_receiver_rssi());
     }
-#endif
     // max airspeed either true or synthetic
     if (have_airspeed_estimate) {
         _stats.max_airspeed_mps = fmaxf(_stats.max_airspeed_mps, aspd_mps);
@@ -545,7 +552,6 @@ void AP_OSD::update_current_screen()
         return;
     }
 
-#if AP_RC_CHANNEL_ENABLED
     RC_Channel *channel = RC_Channels::rc_channel(rc_channel-1);
     if (channel == nullptr) {
         return;
@@ -601,7 +607,6 @@ void AP_OSD::update_current_screen()
         break;
     }
     switch_debouncer = false;
-#endif  // AP_RC_CHANNEL_ENABLED
 }
 
 //select next avaliable screen, do nothing if all screens disabled
