@@ -41,6 +41,8 @@ public:
     static void bus_thread(void *arg);
 
 private:
+    static void periodic_timer_callback(void*);
+
     struct callback_info {
         struct callback_info *next;
         AP_HAL::Device::PeriodicCb cb;

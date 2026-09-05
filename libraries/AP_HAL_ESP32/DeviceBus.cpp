@@ -41,102 +41,169 @@ DeviceBus::DeviceBus(uint8_t _thread_priority) :
 /*
   per-bus callback thread
 */
-void IRAM_ATTR DeviceBus::bus_thread(void *arg)
+
+// volatile static uint64_t last = 0;
+// volatile static uint64_t now = 0;
+// volatile static uint64_t delta = 0;
+// volatile static uint64_t counter = 0;
+// void IRAM_ATTR DeviceBus::bus_thread(void *arg)
+// {
+// #ifdef BUSDEBUG
+//     printf("%s:%d \n", __PRETTY_FUNCTION__, __LINE__);
+// #endif
+//     struct DeviceBus *binfo = (struct DeviceBus *)arg;
+
+//     while (true) {
+//         uint64_t now = AP_HAL::micros64();
+//         DeviceBus::callback_info *callback;
+
+//         // find a callback to run
+//         for (callback = binfo->callbacks; callback; callback = callback->next) {
+//             if (now >= callback->next_usec) {
+//                 while (now >= callback->next_usec) {
+//                     callback->next_usec += callback->period_usec;
+//                 }
+//                 // call it with semaphore held
+//                 if (binfo->semaphore.take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+//                     now = esp_timer_get_time();
+
+//                     delta = last - now;
+//                     if((counter++) % 500 == 0)
+//                     {
+//                         printf("callb d:%lld\n", delta);
+//                     }
+//                     last = now;
+//                     callback->cb();
+//                     binfo->semaphore.give();
+//                 }
+//             }
+//         }
+
+//         // work out when next loop is needed
+//         uint64_t next_needed = 0;
+//         now = AP_HAL::micros64();
+
+//         for (callback = binfo->callbacks; callback; callback = callback->next) {
+//             if (next_needed == 0 ||
+//                 callback->next_usec < next_needed) {
+//                 next_needed = callback->next_usec;
+//                 if (next_needed < now) {
+//                     next_needed = now;
+//                 }
+//             }
+//         }
+
+//         // delay for at most 50ms, to handle newly added callbacks
+//         uint32_t delay = 50000;
+//         if (next_needed >= now && next_needed - now < delay) {
+//             delay = next_needed - now;
+//         }
+//         // don't delay for less than 100usec, so one thread doesn't
+//         // completely dominate the CPU
+//         if (delay < 100) {
+//             delay = 100;
+//         }
+//         hal.scheduler->delay_microseconds(delay);
+//     }
+//     return;
+// }
+
+// AP_HAL::Device::PeriodicHandle DeviceBus::register_periodic_callback(uint32_t period_usec, AP_HAL::Device::PeriodicCb cb, AP_HAL::Device *_hal_device)
+// {
+// #ifdef BUSDEBUG
+//     printf("%s:%d \n", __PRETTY_FUNCTION__, __LINE__);
+// #endif
+//     if (!thread_started) {
+//         thread_started = true;
+//         hal_device = _hal_device;
+//         // setup a name for the thread
+//         char name[configMAX_TASK_NAME_LEN];
+//         switch (hal_device->bus_type()) {
+//         case AP_HAL::Device::BUS_TYPE_I2C:
+//             snprintf(name, sizeof(name), "APM_I2C:%u",
+//                      hal_device->bus_num());
+//             break;
+
+//         case AP_HAL::Device::BUS_TYPE_SPI:
+//             snprintf(name, sizeof(name), "APM_SPI:%u",
+//                      hal_device->bus_num());
+//             break;
+//         default:
+//             break;
+//         }
+// #ifdef BUSDEBUG
+//         printf("%s:%d Thread Start\n", __PRETTY_FUNCTION__, __LINE__);
+// #endif
+//         // xTaskCreate(DeviceBus::bus_thread, name, Scheduler::DEVICE_SS,
+//         //             this, thread_priority, &bus_thread_handle);
+//         xTaskCreatePinnedToCore(DeviceBus::bus_thread, name, Scheduler::DEVICE_SS,
+//                     this, thread_priority, &bus_thread_handle, 1);
+//     }
+//     DeviceBus::callback_info *callback = NEW_NOTHROW DeviceBus::callback_info;
+//     if (callback == nullptr) {
+//         return nullptr;
+//     }
+//     callback->cb = cb;
+//     callback->period_usec = period_usec;
+//     callback->next_usec = AP_HAL::micros64() + period_usec;
+
+//     // add to linked list of callbacks on thread
+//     callback->next = callbacks;
+//     callbacks = callback;
+
+//     return callback;
+// }
+
+
+// volatile static uint64_t last = 0;
+// volatile static uint64_t now = 0;
+// volatile static uint64_t delta = 0;
+// volatile static uint64_t counter = 0;
+
+void IRAM_ATTR DeviceBus::periodic_timer_callback(void* arg)
 {
-#ifdef BUSDEBUG
-    printf("%s:%d \n", __PRETTY_FUNCTION__, __LINE__);
-#endif
-    struct DeviceBus *binfo = (struct DeviceBus *)arg;
+   
 
-    while (true) {
-        uint64_t now = AP_HAL::micros64();
-        DeviceBus::callback_info *callback;
-
-        // find a callback to run
-        for (callback = binfo->callbacks; callback; callback = callback->next) {
-            if (now >= callback->next_usec) {
-                while (now >= callback->next_usec) {
-                    callback->next_usec += callback->period_usec;
-                }
-                // call it with semaphore held
-                if (binfo->semaphore.take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
-                    callback->cb();
-                    binfo->semaphore.give();
-                }
-            }
-        }
-
-        // work out when next loop is needed
-        uint64_t next_needed = 0;
-        now = AP_HAL::micros64();
-
-        for (callback = binfo->callbacks; callback; callback = callback->next) {
-            if (next_needed == 0 ||
-                callback->next_usec < next_needed) {
-                next_needed = callback->next_usec;
-                if (next_needed < now) {
-                    next_needed = now;
-                }
-            }
-        }
-
-        // delay for at most 50ms, to handle newly added callbacks
-        uint32_t delay = 50000;
-        if (next_needed >= now && next_needed - now < delay) {
-            delay = next_needed - now;
-        }
-        // don't delay for less than 100usec, so one thread doesn't
-        // completely dominate the CPU
-        if (delay < 100) {
-            delay = 100;
-        }
-        hal.scheduler->delay_microseconds(delay);
-    }
-    return;
+    //etc_printf();
+    DeviceBus::callback_info *callback = (DeviceBus::callback_info*)arg;
+    
+    //now = esp_timer_get_time();
+    callback->cb();
+    //delta = now - last;
+    // if((counter++) % 1000 == 0)
+    // {
+    //     printf("callb d:%lld\n", delta);
+    // }
+    // last = now;
 }
 
+//Use timer based periodic callbacks for SPI devices
 AP_HAL::Device::PeriodicHandle DeviceBus::register_periodic_callback(uint32_t period_usec, AP_HAL::Device::PeriodicCb cb, AP_HAL::Device *_hal_device)
 {
-#ifdef BUSDEBUG
-    printf("%s:%d \n", __PRETTY_FUNCTION__, __LINE__);
-#endif
-    if (!thread_started) {
-        thread_started = true;
-        hal_device = _hal_device;
-        // setup a name for the thread
-        char name[configMAX_TASK_NAME_LEN];
-        switch (hal_device->bus_type()) {
-        case AP_HAL::Device::BUS_TYPE_I2C:
-            snprintf(name, sizeof(name), "APM_I2C:%u",
-                     hal_device->bus_num());
-            break;
 
-        case AP_HAL::Device::BUS_TYPE_SPI:
-            snprintf(name, sizeof(name), "APM_SPI:%u",
-                     hal_device->bus_num());
-            break;
-        default:
-            break;
-        }
-#ifdef BUSDEBUG
-        printf("%s:%d Thread Start\n", __PRETTY_FUNCTION__, __LINE__);
-#endif
-        xTaskCreate(DeviceBus::bus_thread, name, Scheduler::DEVICE_SS,
-                    this, thread_priority, &bus_thread_handle);
-    }
     DeviceBus::callback_info *callback = NEW_NOTHROW DeviceBus::callback_info;
     if (callback == nullptr) {
         return nullptr;
     }
     callback->cb = cb;
     callback->period_usec = period_usec;
-    callback->next_usec = AP_HAL::micros64() + period_usec;
-
     // add to linked list of callbacks on thread
     callback->next = callbacks;
     callbacks = callback;
 
-    return callback;
+    esp_timer_create_args_t periodic_timer_args = {
+            .callback = &DeviceBus::periodic_timer_callback,
+            .arg = callback,
+            //.dispatch_method = ESP_TIMER_ISR,   //!< Call the callback from task or from ISR
+    };
+
+    esp_timer_handle_t periodic_timer;
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
+    /* The timer has been created but is not running yet */
+
+    /* Start the timer */
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, period_usec));
+    return 0;
 }
 
 /*
