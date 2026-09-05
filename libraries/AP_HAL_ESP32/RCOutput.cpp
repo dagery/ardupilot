@@ -13,6 +13,9 @@
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Code by Charles "Silvanosky" Villard and David "Buzz" Bussenschutt
+ * 
+ * Dshot implementation based on derdoktor667 DSHOT RMT library for esp32 THX
+ * https://github.com/derdoktor667/DShotRMT
  *
  */
 
@@ -24,40 +27,132 @@
 #include <AP_BoardConfig/AP_BoardConfig.h>
 
 #include "driver/rtc_io.h"
-
+#include "soc/rmt_struct.h"
 #include <stdio.h>
+
+#define RCOUTDEBUG 1
 
 extern const AP_HAL::HAL& hal;
 
 using namespace ESP32;
 
+uint64_t last_time = 0;
+
 #ifdef HAL_ESP32_RCOUT
-
-gpio_num_t outputs_pins[] = HAL_ESP32_RCOUT;
-
+    gpio_num_t outputs_pins[] = HAL_ESP32_RCOUT;
 //If the RTC source is not required, then GPIO32/Pin12/32K_XP and GPIO33/Pin13/32K_XN can be used as digital GPIOs.
-
 #else
-gpio_num_t outputs_pins[] = {};
-
+    gpio_num_t outputs_pins[] = {};
 #endif
 
 #define MAX_CHANNELS ARRAY_SIZE(outputs_pins)
 
 struct RCOutput::pwm_out RCOutput::pwm_group_list[MAX_CHANNELS];
 
+void RCOutput::rmt_init(uint8_t chan, enum output_mode mode)
+{
+    //Use 6 channels of rmt to generate dshot 16bit data packets and pwm
+    // thx for info https://github.com/mokhwasomssi/stm32_hal_dshot
+
+    // Protocol Type  	        Dshot 150  	Dshot 300 	Dshot 600 	Dshot 1200
+    // Period time  	        6.67 µs  	3.33 µs  	1.67 µs  	0.833 µs 
+    // Zero high time(T0H)  	2.50 µs  	1.25 µs  	0.625 µs  	0.313 µs 
+    // One high time(T1H)  	    5.00 µs  	2.50 µs  	1.25 µs  	0.625 µs 
+
+    // For dshot150 resolution RMT is 80Mhz, T0H - 200, T1H - 400 
+    // For dshot300 resolution RMT is  
+    // For dshot600 resolution RMT is  
+    // For dshot1200 resolution RMT is  
+
+    // rmt_config_t config;
+    // config.rmt_mode = RMT_MODE_TX;
+    // config.channel = RMT_CHANNEL_0;
+    // config.clk_div = 8;   
+    // config.gpio_num = outputs_pins[0];
+    // config.mem_block_num = 1; //each block could store 64 pulses
+    // config.flags = 0;
+
+    // rmt_config(&config);
+    // rmt_driver_install(config.channel, max_pulses * 8, 0);
+    // rmt_get_ringbuf_handle(config.channel, &handle);
+    // rmt_rx_start(config.channel, true);
+
+    // Set DShot configuration parameters based on input parameters
+
+
+    // Set timing parameters based on selected DShot mode
+    pwm_out &out = pwm_group_list[chan];
+    out.bdshot.is_bidirectional = 0;
+
+    // Calculate dshot timings
+    uint8_t timing_div = 1 << ((uint8_t)mode - (uint8_t)(MODE_PWM_DSHOT150));
+
+    out.bdshot.timing.zero.level0 = 1;
+    out.bdshot.timing.zero.duration0 = DSHOT_TICKS_ZERO_HIGH/timing_div;
+    out.bdshot.timing.zero.level1 = 0;
+    out.bdshot.timing.zero.duration1 = (DSHOT_TICKS_PER_BIT/timing_div - (DSHOT_TICKS_ZERO_HIGH/timing_div));
+
+    out.bdshot.timing.one.level0 = 1;
+    out.bdshot.timing.one.duration0 = DSHOT_TICKS_ONE_HIGH/timing_div;
+    out.bdshot.timing.one.level1 = 0;
+    out.bdshot.timing.one.duration1 = (DSHOT_TICKS_PER_BIT/timing_div - (DSHOT_TICKS_ONE_HIGH/timing_div));
+
+    //set packet period to 
+    out.bdshot.timing.period.level0 = 0;
+    out.bdshot.timing.period.duration0 = 32000;
+    
+    //set packet period with last rmt sample
+    out.bdshot.rmt_dshot_pckt[DSHOT_PACKET_LENGH] = out.bdshot.timing.period;
+
+    out.bdshot.rmt_channel = (rmt_channel_t)(((RMT_CHANNEL_MAX - 1) - chan));
+
+    // Set up RMT configuration for DShot transmission
+    rmt_config_t rmt_config_tx;
+    rmt_config_tx.rmt_mode = RMT_MODE_TX;
+    rmt_config_tx.channel = out.bdshot.rmt_channel;
+    rmt_config_tx.gpio_num = out.gpio_num;
+    rmt_config_tx.mem_block_num = 1;
+    rmt_config_tx.clk_div = 1;                         //10 Mhz target frequency
+    rmt_config_tx.tx_config.loop_en = true;
+    rmt_config_tx.tx_config.carrier_en = false;
+    rmt_config_tx.tx_config.idle_output_en = true;
+    rmt_config_tx.tx_config.idle_level = RMT_IDLE_LEVEL_LOW;
+    rmt_config_tx.flags = 0;
+
+    // Set up selected DShot mode
+    
+    rmt_config(&rmt_config_tx);
+    // Install RMT driver and return result
+    rmt_driver_install(out.bdshot.rmt_channel, 0, 0);
+    rmt_set_memory_owner(out.bdshot.rmt_channel, RMT_MEM_OWNER_TX);
+    dshot_packet_rmt_fill(0, out.bdshot.rmt_dshot_pckt, out.bdshot.timing.one, out.bdshot.timing.zero);          
+    rmt_fill_tx_items(out.bdshot.rmt_channel, out.bdshot.rmt_dshot_pckt, DSHOT_PACKET_LENGH + 1, 0);
+    rmt_tx_memory_reset(out.bdshot.rmt_channel);
+    rmt_tx_stop(out.bdshot.rmt_channel);
+
+   
+
+}
+
 void RCOutput::init()
 {
-    _max_channels = MAX_CHANNELS;
+    if (_initialized) {
+        // cannot init RCOutput twice
+        return;
+    }
 
+    _max_channels = MAX_CHANNELS;
+    #if HAL_WITH_IO_MCU
+
+    #endif
 
     //32 and 33 are special as they dont default to gpio, but can be if u disable their rtc setup:
     rtc_gpio_deinit(GPIO_NUM_32);
     rtc_gpio_deinit(GPIO_NUM_33);
 
-    printf("oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n");
-    printf("RCOutput::init() - channels available: %d \n",(int)MAX_CHANNELS);
-    printf("oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n");
+    #ifdef RCOUTDEBUG
+        printf("RCOutput::init() - channels available: %d \n",(int)MAX_CHANNELS);
+    #endif
 
     static const mcpwm_io_signals_t signals[] = {
         MCPWM0A,
@@ -95,14 +190,15 @@ void RCOutput::init()
         out.io_signal = signal;
         out.op = operators[i%2];
         out.chan = i;
+        out.current_mode = RCOutput::MODE_PWM_NORMAL;
 
         //Setup gpio
         mcpwm_gpio_init(unit, signal, outputs_pins[i]);
         //Setup MCPWM module
         mcpwm_config_t pwm_config;
-        pwm_config.frequency = 50;    //frequency = 50Hz, i.e. for every servo motor time period should be 20ms
-        pwm_config.cmpr_a = 0;    //duty cycle of PWMxA = 0
-        pwm_config.cmpr_b = 0;    //duty cycle of PWMxb = 0
+        pwm_config.frequency = 50;      //frequency = 50Hz, i.e. for every servo motor time period should be 20ms
+        pwm_config.cmpr_a = 0;          //duty cycle of PWMxA = 0
+        pwm_config.cmpr_b = 0;          //duty cycle of PWMxb = 0
         pwm_config.counter_mode = MCPWM_UP_COUNTER;
         pwm_config.duty_mode = MCPWM_DUTY_MODE_0;
         mcpwm_init(unit, timer, &pwm_config);
@@ -111,7 +207,6 @@ void RCOutput::init()
 
     _initialized = true;
 }
-
 
 
 void RCOutput::set_freq(uint32_t chmask, uint16_t freq_hz)
@@ -151,9 +246,20 @@ void RCOutput::enable_ch(uint8_t chan)
     if (!_initialized || chan >= MAX_CHANNELS) {
         return;
     }
-
     pwm_out &out = pwm_group_list[chan];
-    mcpwm_start(out.unit_num, out.timer_num);
+
+    switch(out.current_mode)
+    {
+        case MODE_PWM_NORMAL:
+            mcpwm_start(out.unit_num, out.timer_num);
+        break;
+        case MODE_PWM_DSHOT150 ... MODE_PWM_DSHOT1200:
+            //rmt_tx_start(out.bdshot.rmt_channel, true);
+        break;
+        default: break;
+    }
+
+
 }
 
 void RCOutput::disable_ch(uint8_t chan)
@@ -162,16 +268,30 @@ void RCOutput::disable_ch(uint8_t chan)
         return;
     }
 
-    write(chan, 0);
     pwm_out &out = pwm_group_list[chan];
-    mcpwm_stop(out.unit_num, out.timer_num);
+
+    switch(out.current_mode)
+    {
+        case MODE_PWM_NORMAL:
+            write(chan, 0);
+            mcpwm_stop(out.unit_num, out.timer_num);
+        break;
+        case MODE_PWM_DSHOT150 ... MODE_PWM_DSHOT1200:
+            rmt_tx_stop(out.bdshot.rmt_channel);
+        break;
+        default: break;
+    }
+
 }
 
-void RCOutput::write(uint8_t chan, uint16_t period_us)
+void __RAMFUNC__ RCOutput::write(uint8_t chan, uint16_t period_us)
 {
     if (!_initialized || chan >= MAX_CHANNELS) {
         return;
     }
+
+    pwm_out &out = pwm_group_list[chan];
+    out.period_us = period_us;
 
     if (_corked) {
         _pending[chan] = period_us;
@@ -189,15 +309,16 @@ uint16_t RCOutput::read(uint8_t chan)
     }
 
     pwm_out &out = pwm_group_list[chan];
-    double freq = mcpwm_get_frequency(out.unit_num, out.timer_num);
-    double dprc = mcpwm_get_duty(out.unit_num, out.timer_num, out.op);
-    return (1000000.0 * (dprc / 100.)) / freq;
+    //double freq = mcpwm_get_frequency(out.unit_num, out.timer_num);
+    //double dprc = mcpwm_get_duty(out.unit_num, out.timer_num, out.op);
+    return out.period_us;
 }
 
-void RCOutput::read(uint16_t *period_us, uint8_t len)
+void __RAMFUNC__ RCOutput::read(uint16_t *period_us, uint8_t len)
 {
-    for (int i = 0; i < MIN(len, _max_channels); i++) {
-        period_us[i] = read(i);
+    for (uint8_t chan = 0; chan < MIN(len, MAX_CHANNELS); chan++) {
+        pwm_out &out = pwm_group_list[chan];
+        period_us[chan] = out.period_us;
     }
 }
 
@@ -230,12 +351,17 @@ void RCOutput::push()
     _corked = false;
 }
 
-void RCOutput::timer_tick(void)
+void __RAMFUNC__ RCOutput::timer_tick(void)
 {
+    #if 0
+        printf("RCOUT::timer_tick() time:%lld\n", AP_HAL::micros64() - last_time);
+        last_time = AP_HAL::micros64();
+    #endif
+
     safety_update();
 }
 
-void RCOutput::write_int(uint8_t chan, uint16_t period_us)
+void __RAMFUNC__ RCOutput::write_int(uint8_t chan, uint16_t period_us)
 {
     if (!_initialized || chan >= MAX_CHANNELS) {
         return;
@@ -248,7 +374,35 @@ void RCOutput::write_int(uint8_t chan, uint16_t period_us)
     }
 
     pwm_out &out = pwm_group_list[chan];
-    mcpwm_set_duty_in_us(out.unit_num, out.timer_num, out.op, period_us);
+    uint16_t pwm = out.period_us;
+
+    switch(out.current_mode)
+    {
+        case MODE_PWM_NORMAL:
+            mcpwm_set_duty_in_us(out.unit_num, out.timer_num, out.op, period_us);
+        break;
+        case MODE_PWM_DSHOT150 ... MODE_PWM_DSHOT1200:
+        {
+            if (pwm == 0)
+                break;
+
+            pwm = constrain_int16(pwm, 1000, 2000);
+            uint16_t val = MIN(2 * (pwm - 1000), 1999);
+
+            if (val != 0) {
+                val += DSHOT_ZERO_THROTTLE;
+            }    
+
+            uint16_t dshot_pckt = create_dshot_packet(val, false, false);
+            dshot_packet_rmt_fill(dshot_pckt, out.bdshot.rmt_dshot_pckt, out.bdshot.timing.one, out.bdshot.timing.zero);          
+            rmt_fill_tx_items(out.bdshot.rmt_channel, out.bdshot.rmt_dshot_pckt, DSHOT_PACKET_LENGH + 1, 0);
+            //rmt_write_items(out.bdshot.rmt_channel, out.bdshot.rmt_dshot_pckt, DSHOT_PACKET_LENGH + 1, false);
+            //Make function to write dshot
+        }
+        break;
+        default:
+        break;
+    }
 }
 
 /*
@@ -344,5 +498,111 @@ void RCOutput::safety_update(void)
 */
 void RCOutput::set_failsafe_pwm(uint32_t chmask, uint16_t period_us)
 {
-    //RIP (not the pointer)
+    for(uint8_t chan = 0; chan < MAX_CHANNELS; chan++)
+    {
+        if(!(chmask & (1 << chan)))
+            continue;
+        
+        safe_pwm[chan] = period_us;
+    }
+}
+
+void RCOutput::set_output_mode(uint32_t mask, enum output_mode mode)
+{
+    #ifdef RCOUTDEBUG
+        printf("RCOUT::set_output_mode() - mask:%d: mode:%d(%s)\n",mask, mode, AP_HAL::RCOutput::get_output_mode_string(mode));
+    #endif
+    
+    for(uint8_t chan = 0; chan < MAX_CHANNELS; chan++)
+    {
+        if(!(mask & (1 << chan)))
+            continue;
+
+        pwm_out &out = pwm_group_list[chan];
+        if(out.current_mode == mode)
+            continue;
+        
+        disable_ch(chan);
+        //Disconnect pin from peripheral
+
+        switch(mode)
+        {
+            case MODE_PWM_NORMAL:
+                ;
+            break;
+            case MODE_PWM_DSHOT150 ... MODE_PWM_DSHOT1200:
+                rmt_init(chan,mode);
+            break;
+            default:
+            break;
+        }
+        
+        out.current_mode = mode;
+
+    }
+
+
+    //Start all rmt channels sync
+    if(is_dshot_protocol(mode))
+    {
+        rmt_tx_start(RMT_CHANNEL_7, true);
+        rmt_tx_start(RMT_CHANNEL_6, true);
+        rmt_tx_start(RMT_CHANNEL_5, true);
+        rmt_tx_start(RMT_CHANNEL_4, true);
+    }
+
+}
+
+enum RCOutput::output_mode RCOutput::get_output_mode(uint32_t& mask)
+{
+    #ifdef RCOUTDEBUG
+        printf("RCOUT::get_output_mode %d \n", mask);
+    #endif
+    enum output_mode mode = MODE_PWM_NONE;
+    return mode;
+}
+
+void RCOutput::set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz)
+{
+    #ifdef RCOUTDEBUG
+        printf("RCOUT::set_dshot_rate() - rate:%d: looprate:%d\n",dshot_rate, loop_rate_hz);
+    #endif
+}
+
+void __RAMFUNC__ RCOutput::dshot_packet_rmt_fill(uint16_t dshot_packet, rmt_item32_t* rmt_items, rmt_item32_t one, rmt_item32_t zero)
+{
+    for(uint8_t i = 0; i < DSHOT_PACKET_LENGH; i++)
+    {
+        if(dshot_packet & (0x8000 >> i))
+            rmt_items[i] = one;
+        else
+            rmt_items[i] = zero;
+    }
+}
+
+uint16_t __RAMFUNC__ RCOutput::create_dshot_packet(const uint16_t value, bool telem_request, bool bidir_telem)
+{
+    uint16_t packet = (value << 1);
+
+    if (telem_request) {
+        packet |= 1;
+    }
+
+    // compute checksum
+    uint16_t csum = 0;
+    uint16_t csum_data = packet;
+    for (uint8_t i = 0; i < 3; i++) {
+        csum ^= csum_data;
+        csum_data >>= 4;
+    }
+    // trigger bi-dir dshot telemetry
+    if (bidir_telem) {
+        csum = ~csum;
+    }
+
+    // append checksum
+    csum &= 0xf;
+    packet = (packet << 4) | csum;
+
+    return packet;
 }

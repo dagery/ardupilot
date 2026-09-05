@@ -20,13 +20,22 @@
 
 
 #include <AP_HAL/RCOutput.h>
+#include <AP_HAL/AP_HAL.h>
 #include "HAL_ESP32_Namespace.h"
 #include "driver/mcpwm.h"
+#include "driver/rmt.h"
 #define HAL_PARAM_DEFAULTS_PATH nullptr
 #include <AP_HAL/Util.h>
 
 namespace ESP32
 {
+
+//define dshot signal timing for dshot150
+//all other timing calculates from it
+#define DSHOT_TICKS_PER_BIT     534
+#define DSHOT_TICKS_ZERO_HIGH   200
+#define DSHOT_TICKS_ONE_HIGH    400
+#define DSHOT_PACKET_LENGH      16
 
 class RCOutput : public AP_HAL::RCOutput
 {
@@ -71,7 +80,7 @@ public:
        set PWM to send to a set of channels when the safety switch is
        in the safe state
        */
-    void set_safety_pwm(uint32_t chmask, uint16_t period_us) ;
+    void set_safety_pwm(uint32_t chmask, uint16_t period_us);
 
     /*
        get safety switch state, used by Util.cpp
@@ -91,20 +100,47 @@ public:
         safety_mask = mask;
     }
 
+    /*
+        mark the channels in chanmask as reversed.
+        The chanmask passed is added (ORed) into any existing mask.
+        The mask uses servo channel numbering
+     */
+    //void     set_reversed_mask(uint32_t chanmask) override;
+    //uint32_t get_reversed_mask() override;
 
     void timer_tick() override;
 
+    void set_output_mode(uint32_t mask, enum output_mode mode) override;
+    enum output_mode get_output_mode(uint32_t& mask) override;
+    void set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz) override;
 
 private:
     struct pwm_out {
-        int gpio_num;
-        mcpwm_unit_t unit_num;
-        mcpwm_timer_t timer_num;
-        mcpwm_io_signals_t io_signal;
-        mcpwm_operator_t op;
-        uint8_t chan;
-    };
+        gpio_num_t gpio_num;            // GPIO number pin 
+        enum output_mode current_mode;  // RC output mode (PWM NONE default)
+        uint8_t chan;                   // Channel number
+        uint16_t period_us;             // Channel pulse width in us
 
+        mcpwm_unit_t        unit_num;
+        mcpwm_timer_t       timer_num;
+        mcpwm_io_signals_t  io_signal;
+        mcpwm_operator_t    op;
+
+        //#if HAL_WITH_BIDIR_DSHOT
+        struct {
+            bool is_bidirectional;      //Not used now
+            rmt_channel_t rmt_channel;
+            uint8_t mem_block_num;
+            struct
+            {
+                rmt_item32_t zero;      //rmt item for dshot zero signal
+                rmt_item32_t one;       //rmt item for dshot one signal
+                rmt_item32_t period;    //rmt item to set signal sending period
+            }timing;
+            rmt_item32_t rmt_dshot_pckt[17];    //store full rmt dshot signal sequence
+        }bdshot;
+        //#endif
+    };
 
     void write_int(uint8_t chan, uint16_t period_us);
 
@@ -113,9 +149,9 @@ private:
     bool _corked;
     uint16_t _pending[12]; //Max channel with 2 unit MCPWM
     uint32_t _pending_mask;
+    uint32_t _reversed_mask;
 
     uint16_t safe_pwm[16]; // pwm to use when safety is on
-
     uint16_t _max_channels;
 
     // safety switch state
@@ -131,6 +167,9 @@ private:
     // update safety switch and LED
     void safety_update(void);
 
+    void        rmt_init(uint8_t chan, enum output_mode mode);
+    uint16_t    create_dshot_packet(const uint16_t value, bool telem_request, bool bidir_telem);
+    void        dshot_packet_rmt_fill(uint16_t dshot_packet, rmt_item32_t* rmt_items, rmt_item32_t one, rmt_item32_t zero);
 
     bool _initialized;
 
