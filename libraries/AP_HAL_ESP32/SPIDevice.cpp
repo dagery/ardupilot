@@ -22,6 +22,8 @@
 #include "Semaphores.h"
 #include <stdio.h>
 
+#include "driver/rtc_io.h"
+
 using namespace ESP32;
 
 #define MHZ (1000U*1000U)
@@ -110,7 +112,7 @@ bool SPIDevice::set_speed(AP_HAL::Device::Speed _speed)
     return true;
 }
 
-bool SPIDevice::transfer(const uint8_t *send, uint32_t send_len,
+bool __RAMFUNC__ SPIDevice::transfer(const uint8_t *send, uint32_t send_len,
                          uint8_t *recv, uint32_t recv_len)
 {
 #ifdef SPIDEBUG
@@ -135,7 +137,7 @@ bool SPIDevice::transfer(const uint8_t *send, uint32_t send_len,
     return true;
 }
 
-bool SPIDevice::transfer_fullduplex(const uint8_t *send, uint8_t *recv, uint32_t len)
+bool __RAMFUNC__ SPIDevice::transfer_fullduplex(const uint8_t *send, uint8_t *recv, uint32_t len)
 {
 #ifdef SPIDEBUG
     printf("%s:%d \n", __PRETTY_FUNCTION__, __LINE__);
@@ -147,21 +149,22 @@ bool SPIDevice::transfer_fullduplex(const uint8_t *send, uint8_t *recv, uint32_t
     t.tx_buffer = send;
     t.rxlength = len*8;
     t.rx_buffer = recv;
-    spi_device_transmit(current_handle(), &t);
+    //spi_device_transmit(current_handle(), &t);
+    spi_device_polling_transmit(current_handle(), &t);
     acquire_bus(false);
     return true;
 }
 
-void SPIDevice::acquire_bus(bool accuire)
+void __RAMFUNC__ SPIDevice::acquire_bus(bool accuire)
 {
 #ifdef SPIDEBUG
     printf("%s:%d \n", __PRETTY_FUNCTION__, __LINE__);
 #endif
     if (accuire) {
         spi_device_acquire_bus(current_handle(), portMAX_DELAY);
-        gpio_set_level(device_desc.cs, 0);
+        REG_SET_BIT(GPIO_OUT_W1TC_REG, 1 << device_desc.cs);
     } else {
-        gpio_set_level(device_desc.cs, 1);
+        REG_SET_BIT(GPIO_OUT_W1TS_REG, 1 << device_desc.cs);
         spi_device_release_bus(current_handle());
     }
 }
