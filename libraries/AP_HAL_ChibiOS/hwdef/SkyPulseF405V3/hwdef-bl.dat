@@ -1,0 +1,34 @@
+# bootloader hw definition for SkyPulse F405 (DRAFT)
+# Same directory as hwdef.dat, same board ID, minimal peripherals only.
+
+MCU STM32F4xx STM32F405xx
+
+# TODO: must match hwdef.dat OSCILLATOR_HZ
+OSCILLATOR_HZ 8000000
+
+# TODO: must match hwdef.dat APJ_BOARD_ID (placeholder)
+APJ_BOARD_ID 5000
+
+FLASH_SIZE_KB 1024
+
+# bootloader goes at the very start of flash
+FLASH_RESERVE_START_KB 0
+
+# main app must start where hwdef.dat's FLASH_RESERVE_START_KB says (32KB)
+FLASH_BOOTLOADER_LOAD_KB 48
+
+# USB only is enough for the bootloader; add USART1 as a fallback
+SERIAL_ORDER OTG1 USART1
+
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+PA9  USART1_TX USART1
+PA10 USART1_RX USART1
+
+PC14 LED_BOOTLOADER OUTPUT LOW
+PC15 LED_ACTIVITY OUTPUT LOW
+define HAL_LED_ON 0

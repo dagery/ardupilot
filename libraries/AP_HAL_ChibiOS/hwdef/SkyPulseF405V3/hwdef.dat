@@ -1,0 +1,206 @@
+# hw definition file for processing by chibios_hwdef.py
+# DRAFT for SkyPulse F405 (Ukrainian-made F405 flight stack, Betaflight-derived
+# "milbeta" firmware). Built from a Betaflight `resource` dump, NOT a schematic.
+# ============================================================================
+# UPDATED using `status` output from the running Betaflight-derived firmware.
+# CONFIRMED: MCU=STM32F40x @168MHz (PLLP-HSE), Gyro=ICM42688P on SPI3,
+#            Baro=DPS310 (I2C), OSD=MAX7456, external dataflash=16M (SPI2).
+#
+# STILL TO VERIFY BEFORE FIRST FLASH (see notes marked TODO below):
+#   1. OSCILLATOR_HZ  - `status` confirms an HSE-driven PLL but not the crystal
+#                       value itself. 8MHz is used on ~95% of F405 boards and
+#                       is almost certainly correct here, but check the small
+#                       crystal can's marking near the MCU to be sure.
+#   2. FLASH_SIZE_KB  - the "16M" in `status` is the EXTERNAL dataflash chip
+#                       (for blackbox logging), NOT the MCU's own program
+#                       flash. Internal flash is very likely 1024KB
+#                       (STM32F405RGT6, the common part on these boards) but
+#                       confirm via STM32CubeProgrammer if you can get SWD
+#                       access, or just try 1024KB first.
+#   3. APJ_BOARD_ID   - this is a PLACEHOLDER, must not clash with a real board
+#   4. IMU orientation - ROTATION_NONE is a placeholder until you check how
+#                       the board sits relative to the airframe's axes
+#
+# CONFIRMED via `timer`/`dma` dump: motors=TIM8(M1-4)+TIM2(M5-6), servos=TIM3
+#            (all 4, one independent group), LED strip=TIM11. Beeper pin has
+#            TIM10 capability but is driven here as a plain GPIO, which is
+#            all ArduPilot's buzzer driver needs.
+# Note on DMA: ArduPilot's hwdef build tool auto-assigns DMA streams per
+# peripheral itself at build time; Betaflight's own `dma ...` choices don't
+# need to be hand-copied here unless a build fails with a DMA conflict.
+# ============================================================================
+
+# ---- MCU ----
+MCU STM32F4xx STM32F405xx
+
+# TODO: confirm crystal frequency from board markings
+OSCILLATOR_HZ 8000000
+
+# TODO: reserve a real board ID via PR to Tools/AP_Bootloader/board_types.txt
+# This placeholder is for LOCAL/PRIVATE BUILDS ONLY - do not distribute
+APJ_BOARD_ID 5000
+
+# TODO: confirm actual flash size (most STM32F405RGT6 boards = 1024KB)
+FLASH_SIZE_KB 1024
+
+# ChibiOS system tick timer - not used by any peripheral above
+STM32_ST_USE_TIMER 5
+
+# Bootloader occupies the first 32KB (2x16KB sectors) - matches hwdef-bl.dat
+FLASH_RESERVE_START_KB 48
+
+# ---- Serial ports ----
+# USB
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+
+# SWD debug
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+# order of UARTs (and USB)
+SERIAL_ORDER OTG1 USART1 USART2 USART3 UART4 UART5
+
+# UART1 (R1/T1 on silkscreen)
+PA9  USART1_TX USART1
+PA10 USART1_RX USART1
+
+# UART2 (R2/T2) - often used for SBUS (external inverter on many clones)
+PA2 USART2_TX USART2
+PA3 USART2_RX USART2
+
+# UART3 (R3/T3)
+PC10 USART3_TX USART3
+PC11 USART3_RX USART3
+
+# UART4 (R4/T4)
+PA0 UART4_TX UART4
+PA1 UART4_RX UART4
+
+# UART5 (R5/T5) - note RX is on PD2, TX on PC12 (asymmetric, normal for F405)
+PC12 UART5_TX UART5
+PD2  UART5_RX UART5
+
+
+
+# ---- SPI3: dedicated Gyro/IMU bus (CONFIRMED via `status`: ICM42688P @ 8kHz) ----
+PB3 SPI3_SCK SPI3
+PB4 SPI3_MISO SPI3
+PB5 SPI3_MOSI SPI3
+PB12 GYRO_CS CS
+PC4  GYRO_EXTI INPUT
+
+# ---- SPI2: shared OSD + onboard dataflash bus ----
+PB13 SPI2_SCK SPI2
+PB14 SPI2_MISO SPI2
+PB15 SPI2_MOSI SPI2
+PC3 OSD_CS CS
+PA4 FLASH_CS CS
+
+# ---- SPI device table ----
+# CONFIRMED via `status`: Gyro 1: ICM42688P, spi=SPI3, cs=B12, exti=C04, rate=8000Hz
+SPIDEV icm42688 SPI3 DEVID1 GYRO_CS MODE3 2*MHZ 8*MHZ
+# CONFIRMED via `status`: OSD: MAX7456 (30 x 13)
+SPIDEV osd      SPI2 DEVID2 OSD_CS  MODE0 10*MHZ 10*MHZ
+# CONFIRMED via `status`: FLASH JEDEC ID=0x00c84018, 16M (GigaDevice-family NOR, e.g. GD25Q128)
+SPIDEV dataflash SPI2 DEVID3 FLASH_CS MODE3 32*MHZ 32*MHZ
+
+# TODO: confirm orientation once mounted - ROTATION_NONE is a placeholder
+IMU Invensensev3 SPI:icm42688 ROTATION_ROLL_180_YAW_90
+
+# CONFIRMED via `status`: OSD: MAX7456 (30 x 13)
+define OSD_ENABLED 1
+define HAL_OSD_TYPE_DEFAULT 1
+
+# CONFIRMED via `status`: 16M onboard dataflash for logging
+define HAL_LOGGING_DATAFLASH_ENABLED 1
+
+
+# ---------------- I2C ----------------
+# one I2C bus
+I2C_ORDER I2C1
+
+# I2C1 for baro
+PB6 I2C1_SCL I2C1
+PB7 I2C1_SDA I2C1
+#define HAL_BARO_ALLOW_INIT_NO_BARO 1
+
+# CONFIRMED via `status`: BARO=DPS310, connected on I2C1 (see I2C1 pins below) -
+# ArduPilot auto-probes DPS310 on I2C by default, no extra line required.
+BARO SPL06 I2C:0:0x76
+
+# ---- Motor outputs (M1-M6 on silkscreen) ----
+# CONFIRMED via `timer`/`dma` dump: M1-M4 grouped on TIM8 (AF3), M5-M6 on TIM2 (AF1)
+PC7 TIM8_CH2 TIM8 PWM(2) GPIO(50)   # M1
+PC8 TIM8_CH3 TIM8 PWM(3) GPIO(51)   # M2
+PC9 TIM8_CH4 TIM8 PWM(4) GPIO(52)   # M3
+PC6 TIM8_CH1 TIM8 PWM(1) GPIO(53)   # M4
+PB10 TIM2_CH3 TIM2 PWM(5) GPIO(54)  # M5
+PB11 TIM2_CH4 TIM2 PWM(6) GPIO(55)  # M6
+
+# ---- Servo/control-surface outputs (S1-S4 on silkscreen) ----
+# CONFIRMED via `timer` dump: all four land on TIM3 (AF2) as one independent
+# group - since TIM8 (motors) and TIM2 (motors) don't overlap with TIM3, all
+# four servos can share one rate setting without touching the motor outputs.
+PB0 TIM3_CH3 TIM3 PWM(7) GPIO(56)   # S1
+PB1 TIM3_CH4 TIM3 PWM(8) GPIO(57)   # S2
+PA6 TIM3_CH1 TIM3 PWM(9) GPIO(58)   # S3
+PA7 TIM3_CH2 TIM3 PWM(10) GPIO(59)  # S4
+
+# ---- LED strip (WS2812) ----
+# CONFIRMED via `timer` dump: TIM11 CH1 (AF3), not TIM4 as originally guessed
+# PB9 TIM11_CH1 TIM11 PWM(11) GPIO(60)
+
+# ---- Beeper ----
+PB8 BUZZER OUTPUT GPIO(80) LOW
+
+# ---- Status LEDs ----
+PC14 LED_BOOTLOADER OUTPUT LOW
+PC15 LED_ACTIVITY OUTPUT LOW
+define HAL_LED_ON 0
+
+# ---- Camera control ----
+PA15 CAM_TRIGGER OUTPUT GPIO(70) LOW
+
+# ---- Spare switched-power pins (PINIO on Betaflight - VTX/cam power etc) ----
+# Left as plain GPIO outputs; wire up as RELAY pins or repurpose as needed.
+PA5  PINIO1 OUTPUT GPIO(71) LOW
+PC13 PINIO2 OUTPUT GPIO(72) LOW
+PC5  PINIO3 OUTPUT GPIO(73) LOW
+PB2  PINIO4 OUTPUT GPIO(74) LOW
+
+# ---- ADC ----
+PC2 BATT_VOLTAGE_SENS ADC1 SCALE(1)
+PC1 BATT_CURRENT_SENS ADC1 SCALE(1)
+PC0 RSSI_ADC_PIN ADC1 SCALE(1)
+
+# TODO: set correct scaling once you know the resistor divider values
+define HAL_BATT_VOLT_PIN 12
+define HAL_BATT_CURR_PIN 11
+define HAL_BATT_VOLT_SCALE 10.0
+define HAL_BATT_CURR_SCALE 17.0
+
+# ---- DataFlash ----
+define HAL_STORAGE_SIZE 15360
+STORAGE_FLASH_PAGE 1
+# enable logging to dataflash
+define HAL_LOGGING_DATAFLASH_ENABLED 1
+define HAL_LOGGING_DATAFLASH_DRIVER AP_Logger_Flash_JEDEC
+define HAL_LOGGING_FLASH_JEDEC_ENABLED 1
+
+# disable parachute to save flash
+define HAL_PARACHUTE_ENABLED 0
+
+# no built-in compass, but probe the i2c bus for all possible
+# external compass types
+define ALLOW_ARM_NO_COMPASS
+define AP_COMPASS_PROBING_ENABLED 1
+define HAL_I2C_INTERNAL_MASK 0
+define HAL_COMPASS_AUTO_ROT_DEFAULT 2
+define HAL_DEFAULT_INS_FAST_SAMPLE 1
+
+# save some flash
+include ../include/minimize_fpv_osd.inc
+
+
+
