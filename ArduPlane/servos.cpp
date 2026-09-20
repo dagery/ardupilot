@@ -1027,6 +1027,14 @@ void Plane::servos_output(void)
     channel_function_mixer(SRV_Channel::k_aileron, SRV_Channel::k_elevator, SRV_Channel::k_elevon_left, SRV_Channel::k_elevon_right);
     channel_function_mixer(SRV_Channel::k_rudder,  SRV_Channel::k_elevator, SRV_Channel::k_vtail_right, SRV_Channel::k_vtail_left);
 
+    float aileron  = SRV_Channels::get_output_scaled(SRV_Channel::k_aileron);
+    float elevator = SRV_Channels::get_output_scaled(SRV_Channel::k_elevator);
+    float rudder   = SRV_Channels::get_output_scaled(SRV_Channel::k_rudder);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UL,  elevator - aileron + rudder);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UR,  elevator + aileron - rudder);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LL, -elevator - aileron - rudder);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LR, -elevator + aileron + rudder);
+
 #if HAL_QUADPLANE_ENABLED
     // cope with tailsitters and bicopters
     quadplane.tailsitter.output();

@@ -507,6 +507,12 @@ void Tailsitter::output(void)
     SRV_Channels::set_output_scaled(SRV_Channel::k_elevon_right, elevator_mix + aileron_mix);
     SRV_Channels::set_output_scaled(SRV_Channel::k_vtail_right, elevator_mix - rudder_mix);
     SRV_Channels::set_output_scaled(SRV_Channel::k_vtail_left, elevator_mix + rudder_mix);
+    
+    // X-tail: reuse the same gain/offset-adjusted mix locals used above
+    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UL,  elevator_mix - aileron_mix + rudder_mix);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UR,  elevator_mix + aileron_mix - rudder_mix);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LL, -elevator_mix - aileron_mix - rudder_mix);
+    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LR, -elevator_mix + aileron_mix + rudder_mix);
 
     if (roll_lim) {
         motors->limit.roll = true;
