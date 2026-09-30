@@ -1279,6 +1279,13 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("GUIDED_TIMEOUT", 40, ParametersG2, guided_timeout, 3.0f),
 
+    // @Param: XTAIL_INV
+    // @DisplayName: X-tail/X-canard axis inversion
+    // @Description: Inverts the pitch, roll and/or yaw command sent to the four X surfaces. Use bit 0 for X-canards, where pitch is reversed relative to an X-tail.
+    // @Bitmask: 0:Invert pitch,1:Invert roll,2:Invert yaw
+    // @User: Advanced
+    AP_GROUPINFO("XTAIL_INV", 41, ParametersG2, xtail_invert, 0),
+
     AP_GROUPEND
 };
 

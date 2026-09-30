@@ -446,6 +446,7 @@ public:
     AP_Float RTL_altitude;
     AP_Float pitch_trim;
     AP_Float cruise_alt_floor;
+    AP_Int8 xtail_invert;
 
     AP_Int8 flap_1_percent;
     AP_Int8 flap_1_speed;
@@ -569,6 +570,7 @@ public:
 #endif
 
     AP_Float guided_timeout;
+    AP_Int8 xtail_invert;
 
 #if AP_SCRIPTING_ENABLED && AP_FOLLOW_ENABLED
     AP_Follow follow;
