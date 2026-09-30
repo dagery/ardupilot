@@ -1185,6 +1185,13 @@ private:
     void update_throttle_hover();
     void channel_function_mixer(SRV_Channel::Function func1_in, SRV_Channel::Function func2_in,
                                 SRV_Channel::Function func1_out, SRV_Channel::Function func2_out) const;
+    void channel_function_xtail_mixer(SRV_Channel::Function func_roll,
+                                  SRV_Channel::Function func_pitch,
+                                  SRV_Channel::Function func_yaw,
+                                  SRV_Channel::Function func_UL,
+                                  SRV_Channel::Function func_UR,
+                                  SRV_Channel::Function func_LL,
+                                  SRV_Channel::Function func_LR) const;
     void flaperon_update();
     void indicate_waiting_for_rud_neutral_to_takeoff(void);
 

@@ -195,6 +195,48 @@ void Plane::channel_function_mixer(SRV_Channel::Function func1_in, SRV_Channel::
     SRV_Channels::set_output_scaled(func2_out, out2);
 }
 
+void Plane::channel_function_xtail_mixer(SRV_Channel::Function func_roll,
+                                         SRV_Channel::Function func_pitch,
+                                         SRV_Channel::Function func_yaw,
+                                         SRV_Channel::Function func_UL,
+                                         SRV_Channel::Function func_UR,
+                                         SRV_Channel::Function func_LL,
+                                         SRV_Channel::Function func_LR) const
+{
+    float roll  = SRV_Channels::get_output_scaled(func_roll);
+    float pitch = SRV_Channels::get_output_scaled(func_pitch);
+    float yaw   = SRV_Channels::get_output_scaled(func_yaw);
+
+    // per-axis inversion (X-canard, or any airframe where a direction is backwards)
+    if (g2.xtail_invert & (1U << 0)) { pitch = -pitch; }
+    if (g2.xtail_invert & (1U << 1)) { roll  = -roll;  }
+    if (g2.xtail_invert & (1U << 2)) { yaw   = -yaw;   }
+
+    // MIXING_OFFSET: negative boosts pitch, positive boosts yaw
+    if (g.mixing_offset < 0) {
+        pitch *= (100 - g.mixing_offset) * 0.01;
+    } else if (g.mixing_offset > 0) {
+        yaw *= (100 + g.mixing_offset) * 0.01;
+    }
+
+    float ul = ( pitch - roll + yaw) * g.mixing_gain;
+    float ur = ( pitch + roll - yaw) * g.mixing_gain;
+    float ll = (-pitch - roll - yaw) * g.mixing_gain;
+    float lr = (-pitch + roll + yaw) * g.mixing_gain;
+
+    // desaturate while preserving axis ratios
+    const float peak = MAX(MAX(fabsf(ul), fabsf(ur)), MAX(fabsf(ll), fabsf(lr)));
+    if (peak > 4500.0f) {
+        const float scale = 4500.0f / peak;
+        ul *= scale;  ur *= scale;
+        ll *= scale;  lr *= scale;
+    }
+
+    SRV_Channels::set_output_scaled(func_UL, ul);
+    SRV_Channels::set_output_scaled(func_UR, ur);
+    SRV_Channels::set_output_scaled(func_LL, ll);
+    SRV_Channels::set_output_scaled(func_LR, lr);
+}
 
 /*
   setup flaperon output channels
@@ -1027,13 +1069,9 @@ void Plane::servos_output(void)
     channel_function_mixer(SRV_Channel::k_aileron, SRV_Channel::k_elevator, SRV_Channel::k_elevon_left, SRV_Channel::k_elevon_right);
     channel_function_mixer(SRV_Channel::k_rudder,  SRV_Channel::k_elevator, SRV_Channel::k_vtail_right, SRV_Channel::k_vtail_left);
 
-    float aileron  = SRV_Channels::get_output_scaled(SRV_Channel::k_aileron);
-    float elevator = SRV_Channels::get_output_scaled(SRV_Channel::k_elevator);
-    float rudder   = SRV_Channels::get_output_scaled(SRV_Channel::k_rudder);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UL,  elevator - aileron + rudder);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UR,  elevator + aileron - rudder);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LL, -elevator - aileron - rudder);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LR, -elevator + aileron + rudder);
+    // channel_function_xtail_mixer(SRV_Channel::k_aileron, SRV_Channel::k_elevator, SRV_Channel::k_rudder,
+    //                          SRV_Channel::k_xtail_UL, SRV_Channel::k_xtail_UR,
+    //                          SRV_Channel::k_xtail_LL, SRV_Channel::k_xtail_LR);
 
 #if HAL_QUADPLANE_ENABLED
     // cope with tailsitters and bicopters

@@ -50,13 +50,16 @@ void ModeQAcro::run()
         float target_roll = 0;
         float target_pitch = plane.channel_pitch->norm_input() * quadplane.acro_pitch_rate * 100.0f;
         float target_yaw = 0;
-        if (quadplane.tailsitter.enabled()) {
+        // Only use the swapped (plane-style) mapping if the pilot selected plane-style input
+        
+        if (quadplane.tailsitter.enabled() && quadplane.tailsitter.input_type == Tailsitter::TAILSITTER_INPUT_PLANE) {
             // Note that the 90 degree Y rotation for copter mode swaps body-frame roll and yaw
             target_roll =  plane.channel_rudder->norm_input() * quadplane.acro_yaw_rate * 100.0f;
-            target_yaw  = -plane.channel_roll->norm_input() * quadplane.acro_roll_rate * 100.0f;
+            target_yaw  = -plane.channel_roll->norm_input()   * quadplane.acro_roll_rate * 100.0f;
         } else {
-            target_roll = plane.channel_roll->norm_input() * quadplane.acro_roll_rate * 100.0f;
-            target_yaw  = plane.channel_rudder->norm_input() * quadplane.acro_yaw_rate * 100.0;
+            // multicopter-style sticks (also used for non-tailsitters)
+            target_roll = plane.channel_roll->norm_input()   * quadplane.acro_roll_rate * 100.0f;
+            target_yaw  = plane.channel_rudder->norm_input() * quadplane.acro_yaw_rate  * 100.0f;
         }
 
         float throttle_out = quadplane.get_pilot_throttle();

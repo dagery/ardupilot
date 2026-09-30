@@ -227,6 +227,8 @@ void Tailsitter::setup()
     _have_rudder = SRV_Channels::function_assigned(SRV_Channel::k_rudder);
     _have_elevon = SRV_Channels::function_assigned(SRV_Channel::k_elevon_left) || SRV_Channels::function_assigned(SRV_Channel::k_elevon_right);
     _have_v_tail = SRV_Channels::function_assigned(SRV_Channel::k_vtail_left) || SRV_Channels::function_assigned(SRV_Channel::k_vtail_right);
+    _have_x_tail = SRV_Channels::function_assigned(SRV_Channel::k_xtail_LL) || SRV_Channels::function_assigned(SRV_Channel::k_xtail_LR) || 
+                    SRV_Channels::function_assigned(SRV_Channel::k_xtail_UL) || SRV_Channels::function_assigned(SRV_Channel::k_xtail_UR);
 
     // set defaults for dual/single motor tailsitter
     if (quadplane.frame_class == AP_Motors::MOTOR_FRAME_TAILSITTER) {
@@ -383,7 +385,7 @@ void Tailsitter::output(void)
             motors->limit.yaw = true;
 
             // VTOL and FW pitch
-            if (_have_elevator || _have_elevon || _have_v_tail) {
+            if (_have_elevator || _have_elevon || _have_v_tail || _have_x_tail) {
                 // have pitch control surfaces, use them
                 quadplane.attitude_control->get_rate_pitch_pid().relax_integrator(0.0, dt, AC_ATTITUDE_RATE_RELAX_TC);
                 motors->limit.pitch = true;
@@ -394,7 +396,7 @@ void Tailsitter::output(void)
             }
 
             // VTOL roll / FW yaw
-            if (_have_rudder || _have_v_tail) {
+            if (_have_rudder || _have_v_tail || _have_x_tail) {
                 // there are yaw control  surfaces, zero motor I term
                 quadplane.attitude_control->get_rate_roll_pid().relax_integrator(0.0, dt, AC_ATTITUDE_RATE_RELAX_TC);
                 motors->limit.roll = true;
@@ -508,11 +510,51 @@ void Tailsitter::output(void)
     SRV_Channels::set_output_scaled(SRV_Channel::k_vtail_right, elevator_mix - rudder_mix);
     SRV_Channels::set_output_scaled(SRV_Channel::k_vtail_left, elevator_mix + rudder_mix);
     
-    // X-tail: reuse the same gain/offset-adjusted mix locals used above
-    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UL,  elevator_mix - aileron_mix + rudder_mix);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UR,  elevator_mix + aileron_mix - rudder_mix);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LL, -elevator_mix - aileron_mix - rudder_mix);
-    SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LR, -elevator_mix + aileron_mix + rudder_mix);
+    // X-tail hover mix: pitch has priority, roll/yaw share the remaining headroom
+    if (_have_x_tail) {
+        // start from the unmixed, unclipped values
+        float xe = SRV_Channels::get_output_scaled(SRV_Channel::k_elevator);
+        float xa = SRV_Channels::get_output_scaled(SRV_Channel::k_aileron);
+        float xr = SRV_Channels::get_output_scaled(SRV_Channel::k_rudder);
+
+        //same per-axis inversion as the forward-flight mixer
+        //(bit 1 "roll" acts on k_aileron, which is VTOL yaw)
+        if (plane.g2.xtail_invert & (1U << 0)) { xe = -xe; }
+        if (plane.g2.xtail_invert & (1U << 1)) { xa = -xa; }
+        if (plane.g2.xtail_invert & (1U << 2)) { xr = -xr; }
+
+        xe *= (100.0 - plane.g.mixing_offset) * 0.01 * plane.g.mixing_gain;
+        xa *= (100.0 + plane.g.mixing_offset) * 0.01 * plane.g.mixing_gain;
+        xr *= (100.0 + plane.g.mixing_offset) * 0.01 * plane.g.mixing_gain;
+
+        const float xh = SERVO_MAX - fabsf(xe);
+        if (is_positive(xh)) {
+            const float sum = fabsf(xa) + fabsf(xr);
+            if (sum > xh) {
+                const float s = xh / sum;
+                xa *= s;
+                xr *= s;
+                yaw_lim = true;
+                roll_lim = true;
+            }
+        } else {
+            xa = 0.0;
+            xr = 0.0;
+            pitch_lim = true;
+            yaw_lim = true;
+            roll_lim = true;
+        }
+
+        // SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UL,  xe - xa + xr);
+        // SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UR,  xe + xa - xr);
+        // SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LL, -xe - xa - xr);
+        // SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LR, -xe + xa + xr);
+
+        SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UL,  xe + xa - xr);
+        SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_UR,  xe - xa + xr);
+        SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LL, -xe - xa - xr);
+        SRV_Channels::set_output_scaled(SRV_Channel::k_xtail_LR, -xe + xa + xr);
+    }
 
     if (roll_lim) {
         motors->limit.roll = true;
